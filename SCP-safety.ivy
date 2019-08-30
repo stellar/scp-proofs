@@ -9,7 +9,7 @@ type ballot
 
 trusted isolate ordering_assms = {
     instantiate totally_ordered(ballot)
-    instantiate totally_ordered(value)     
+    instantiate totally_ordered(value)
 }
 
 relation well_behaved(N:node)
@@ -155,7 +155,6 @@ object protocol = {
         
         # n1 receives a new vote to prepare (b,v); it checks whether quorum threshold is reached and, if so, accepts (b,v) as prepared unless it accepted a different, earlier value as committed.
         action receive_vote_prepare(na:node, nb:node, b:ballot, v:value) = {
-            # assume ~left_ballot(na,b); TODO keep participating in old ballots?
             assume started(na,b);
             assume voted_prepared(nb,b,v);
             received_vote_prepare(na,nb,b,v) := true;
@@ -268,12 +267,12 @@ object protocol = {
     # 28 extra conjs.
     isolate liveness_supporting_conjs_1 = {
 
-        # Now we prove more safety properties that we later use in the liveness proof. The most important one is that if an intact node confirms (b,v) prepared, then no intact node ever contradicts that
+        # Now we prove more safety properties that we later use in the liveness proof. The most important property is that if an intact node confirms (b,v) prepared, then no intact node ever accepts a contradictory statement.
         
         object spec = {
             
             # a confirmed prepared value cannot be contradicted.
-            conjecture intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
+            conjecture [main] intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
             
             # left_ballot and started:
             conjecture ~(well_behaved(N) & left_ballot(N,B) & B2 < B & ~left_ballot(N,B2))
@@ -289,10 +288,12 @@ object protocol = {
 
         object impl = {
 
+            # the two conjectures below are the crux of why the main conjecture above holds.
+            
             # once a quorum votes unanimously to commit a value, no other value can ever be voted prepared unanimously by a quorum.
-            conjecture is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V)) & B2 > B & V2 ~= V -> forall N . intact(N) & member(N,Q) -> ~(voted_prepared(N,B2,V2) | accepted_prepared(N,B2,V2) | confirmed_prepared(N,B2,V2))
+            conjecture [crux1] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V)) & B2 > B & V2 ~= V -> forall N . intact(N) & member(N,Q) -> ~(voted_prepared(N,B2,V2) | accepted_prepared(N,B2,V2) | confirmed_prepared(N,B2,V2))
             # a node does not prepare a value that contradicts a previous vote unless the vote was overruled (this is needed to make the previous inductive):
-            conjecture is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & intact(N1) & V1 ~= V2 & voted_prepared(N1,B1,V1) & B2 < B1 -> (~voted_committed(N1,B2,V2) | (exists N . intact(N) & member(N,Q) & left_ballot(N,B2) & ~voted_committed(N,B2,V2))) # NOTE: this conjecture is only needed for receive_accept_prepare and may be commented out for faster verification of the other actions.
+            conjecture [crux2] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & intact(N1) & V1 ~= V2 & voted_prepared(N1,B1,V1) & B2 < B1 -> (~voted_committed(N1,B2,V2) | (exists N . intact(N) & member(N,Q) & left_ballot(N,B2) & ~voted_committed(N,B2,V2))) # NOTE: this conjecture is only needed for receive_accept_prepare and may be commented out for faster verification of the other actions.
             
             # well-behaved nodes do not accept contradictory things:
             conjecture well_behaved(N) & accepted_committed(N,B1,V1) & (B1 <= B2 & V1 ~= V2) -> ~accepted_prepared(N,B2,V2)

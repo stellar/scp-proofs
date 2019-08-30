@@ -1,9 +1,5 @@
 #lang ivy1.6
 
-# Specification of SCP with federated voting inlined
-
-# We also prove safety
-
 include order
 
 type value
@@ -183,7 +179,7 @@ object protocol = {
                     ((forall B,V . B < b -> ~confirmed_prepared(n,B,V)) & nomination_output(n,vmax))
                     | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> (B < bmax | (B = bmax & V <= vmax))));
                 # NOTE at this point it is not possible that we contradict a non-overruled vote to commit because a vote to commit must have been prepared first.
-                voted_prepared(n, b, vmax) := true; # note we vote to prepare only once per ballot. this may be crucial for liveness as we don't want intact nodes voting to commit different values in the same ballot.
+                voted_prepared(n, b, vmax) := true; # Note we vote to prepare only once per ballot.
             };
 
             call assume_safety_properties();            
@@ -193,7 +189,6 @@ object protocol = {
         action receive_vote_prepare(na:node, nb:node, b:ballot, v:value) = {
             call assume_safety_properties();
             
-            # assume ~left_ballot(na,b); TODO keep participating in old ballots?
             assume started(na,b);
             assume voted_prepared(nb,b,v);
             received_vote_prepare(na,nb,b,v) := true;
@@ -283,55 +278,62 @@ object protocol = {
     # prophecy witnesses:
     individual n1:node
     individual n2:node
-    individual b3:ballot
+    individual b1:ballot
     individual v:value
     individual q0:nset
     
     isolate liveness = {
 
         # Here we prove that by the end of a "good" ballot, all intact nodes have confirmed prepared the same things. This relies on the cascade theorem and also on the fact that once an intact node accepts something prepared, it can never be contradicted by other intact nodes anymore. This last property is crucial since nodes do not accept contradictory statements and therefore cascading may not occur.
+        # Formally, we assume that the intact node n1 violates this property and we derive a contradiction.
         
         object spec = {
             temporal property (
-                # all well-behaved nodes that take steps in b0 are synchronous (no requirements on crashed nodes):
+                # Well-behaved nodes are synchronous in b0 (there is no requirement to be up and send messages, but a message sent must be delivered to all).
+                # TODO this requirement could be weakened to only require that intact nodes receive all messages sent by well-behaved nodes that are in their quorums.
                 (forall N1,N2,N3,V,B . well_behaved(N1) & well_behaved(N2) & well_behaved(N3) & B <= b0 -> globally ~(left_ballot(N3,b0) & accepted_prepared(N2,B,V) & ~received_accept_prepare(N1,N2,B,V))) &
-                # prophecy witnesses (TODO here we take shortcuts that depend on monotonicity):
-                is_quorum(q0) & (exists N . intact(N) & member(N, q0)) & (globally ((exists Q . forall N . member(N,Q) & well_behaved(N) -> accepted_prepared(N,b3,v)) -> (forall N . member(N,q0) & well_behaved(N) -> accepted_prepared(N,b3,v)))) &
-                b3 <= b0 & intact(n1) & intact(n2) & (eventually (confirmed_prepared(n1,b3,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b3,v)))
-            ) -> forall B,N1,N2,V . B <= b0 & intact(N1) & intact(N2) -> globally ~(confirmed_prepared(N1,B,V) & left_ballot(N2,b0) & ~confirmed_prepared(N2,B,V))
+                # prophecy witness q0 (TODO here we take a shortcut whose soundness depends on the accepted_prepared relation being monotonic):
+                is_quorum(q0) & (exists N . intact(N) & member(N, q0)) & (globally ((exists Q . forall N . member(N,Q) & well_behaved(N) -> accepted_prepared(N,b1,v)) -> (forall N . member(N,q0) & well_behaved(N) -> accepted_prepared(N,b1,v)))) &
+                b1 <= b0 & intact(n1) & intact(n2) & (eventually (confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v)))
+            ) -> false
         }
 
 
         object impl = {
-        
+
+            # The proof:
+            # Once confirmed_prepared(n1,b1,v) holds, the quorum q0 has unanimously accepted (b1,v) as prepared. Hence, by the cascade theorem, either (a) all intact nodes accepted (b1,v) as prepared, or (b) there is an intact node n that has not accepted (b1,v) as prepared and that is blocked by the intact nodes that have. Note that (c) since b0 is a good ballot and n2 already left b0, all intact nodes received all accept-prepared messages addressed to them. In case (a), all intact nodes received accept-prepare (b1,v) from a quorum and confirmed (b1,v) as preapred; thus ~confirmed_prepared(n2,b1,v) leads to a contradiction. In case (b), node n must be waiting to receive an accept-prepare messages from another intact node, or otherwise it would have accepted (b1,v) as prepared. However, by (1) it must also have received them all; thus we reach a contradiction too.
+            
+            # WARNING: due to quantifier alternation cycles, this takes several hours to check on a recent laptop. The verification varies significantly depending on the random seed passed to Z3.
+         
             # properties of the initial footprint:
             conjecture well_behaved(N) -> l2s_d(N)
-            conjecture l2s_d(n1) & l2s_d(n2) & l2s_d(b3) & l2s_d(v) & l2s_d(b0)
+            conjecture l2s_d(n1) & l2s_d(n2) & l2s_d(b1) & l2s_d(v) & l2s_d(b0)
 
-            conjecture  b3 <= b0 & intact(n1) & intact(n2)
+            conjecture  b1 <= b0 & intact(n1) & intact(n2)
            
             # waiting can only cease when the condition is true:
-            conjecture ~globally ~(confirmed_prepared(n1,b3,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b3,v))
-            conjecture ($l2s_w . confirmed_prepared(n1,b3,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b3,v)) | (confirmed_prepared(n1,b3,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b3,v))
-            conjecture ($l2s_w . confirmed_prepared(n1,b3,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b3,v)) -> ~(confirmed_prepared(n1,b3,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b3,v))
+            conjecture ~globally ~(confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v))
+            conjecture ($l2s_w . confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v)) | (confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v))
+            conjecture ($l2s_w . confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v)) -> ~(confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v))
             
             # the q0 witness:
-            conjecture is_quorum(q0) & (exists N . intact(N) & member(N, q0)) & (globally ((exists Q . forall N . member(N,Q) & well_behaved(N) -> accepted_prepared(N,b3,v)) -> (forall N . member(N,q0) & well_behaved(N) -> accepted_prepared(N,b3,v))))
-            conjecture confirmed_prepared(n1,b3,v) -> (forall N . member(N,q0) & intact(N) -> accepted_prepared(N,b3,v)) & is_quorum(q0) & (exists N2 . intact(N2) & member(N2,q0))
+            conjecture is_quorum(q0) & (exists N . intact(N) & member(N, q0)) & (globally ((exists Q . forall N . member(N,Q) & well_behaved(N) -> accepted_prepared(N,b1,v)) -> (forall N . member(N,q0) & well_behaved(N) -> accepted_prepared(N,b1,v))))
+            conjecture confirmed_prepared(n1,b1,v) -> (forall N . member(N,q0) & intact(N) -> accepted_prepared(N,b1,v)) & is_quorum(q0) & (exists N2 . intact(N2) & member(N2,q0))
             
             # well-behaved nodes are synchronous in b0:
             conjecture well_behaved(N1) & well_behaved(N2) & well_behaved(N3) & B <= b0 -> globally ~(left_ballot(N3,b0) & accepted_prepared(N2,B,V) & ~received_accept_prepare(N1,N2,B,V))
             
-            conjecture ~(confirmed_prepared(n1,b3,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b3,v))
+            conjecture ~(confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v))
 
-            conjecture ($l2s_w . confirmed_prepared(n1,b3,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b3,v))
+            conjecture ($l2s_w . confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v))
 
             conjecture l2s_waiting # we never reach the freeze point.
             
             # those three should not be needed... just for debugging: all OKAY
-            # conjecture left_ballot(n2,b0) & intact(N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b3,v))) -> (forall N3 . member(N3,S) -> received_accept_prepare(N2,N3,b3,v))
-            # conjecture intact(N2) &  blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & received_accept_prepare(N2,N3,b3,v))) & confirmed_prepared(n1,b3,v) -> accepted_prepared(N2,b3,v)
-            # conjecture (confirmed_prepared(n1,b3,v) & left_ballot(n2,b0)) -> (confirmed_prepared(n2,b3,v) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b3,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b3,v)))))
+            # conjecture left_ballot(n2,b0) & intact(N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b1,v))) -> (forall N3 . member(N3,S) -> received_accept_prepare(N2,N3,b1,v))
+            # conjecture intact(N2) &  blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & received_accept_prepare(N2,N3,b1,v))) & confirmed_prepared(n1,b1,v) -> accepted_prepared(N2,b1,v)
+            # conjecture (confirmed_prepared(n1,b1,v) & left_ballot(n2,b0)) -> (confirmed_prepared(n2,b1,v) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b1,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b1,v)))))
 
         }
         
