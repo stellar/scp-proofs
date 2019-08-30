@@ -82,12 +82,12 @@ object protocol = {
             assume ~(well_behaved(N) & started(N,B) & B0 < B & ~left_ballot(N,B0));
             assume well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V);
             assume well_behaved(N) & voted_prepared(N,B,V) -> started(N,B);
-            assume intact(n2) & (forall N. intact(N) -> received_accept_prepare(n2,N,b3,v)) -> confirmed_prepared(n2,b3,v);
-            assume intact(N1) & blocks_slices(S,N1) & (forall N2. member(N2,S) -> received_accept_prepare(N1,N2,b3,v)) & (forall B,V . B <= b3  & accepted_committed(N1,B,V) -> V = v) -> accepted_prepared(N1,b3,v);
+            assume intact(n2) & (forall N. intact(N) -> received_accept_prepare(n2,N,b1,v)) -> confirmed_prepared(n2,b1,v);
+            assume intact(N1) & blocks_slices(S,N1) & (forall N2. member(N2,S) -> received_accept_prepare(N1,N2,b1,v)) & (forall B,V . B <= b1  & accepted_committed(N1,B,V) -> V = v) -> accepted_prepared(N1,b1,v);
             assume intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2;
 
             # The cascade theorem: if a set of nodes including a quorum of an intact node accepts, then either all intact accept or there is an intact node blocked by a subset of intact that accepts:
-            assume is_quorum(q0) & (exists N0 . intact(N0) & member(N0,q0)) & (forall N . intact(N) & member(N,q0) -> accepted_prepared(N,b3,v)) -> ((forall N1 . intact(N1) -> accepted_prepared(N1,b3,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b3,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b3,v)))));
+            assume is_quorum(q0) & (exists N0 . intact(N0) & member(N0,q0)) & (forall N . intact(N) & member(N,q0) -> accepted_prepared(N,b1,v)) -> ((forall N1 . intact(N1) -> accepted_prepared(N1,b1,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b1,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b1,v)))));
             
         }
         
