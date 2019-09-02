@@ -9,13 +9,13 @@ proved in `SCP-liveness-1.ivy`, `SCP-liveness-2.ivy`, and `SCP-liveness-3.ivy`.
 * In `SCP-liveness-1.ivy` we prove that if a ballot is long enough and all
   nodes in the quorums of intact nodes are timely, then all intact nodes agree
   on what is confirmed prepared by the end of the ballot.
-* In `SCP-liveness-2.ivy` we prove that if intact nodes all prepare the same
+* In `SCP-liveness-2.ivy`, we prove that if all intact nodes agree on what is
+  confirmed prepared before a ballot b, then they all propose the same value
+  and this value cannot be contradicted in previous ballots.
+* In `SCP-liveness-3.ivy` we prove that if intact nodes all prepare the same
   value in a long-enough ballot, and if this value is not contradicted in
   previous ballots, then all intact nodes confirm the value as committed by the
   end of the ballot.
-* In `SCP-liveness-3.ivy`, we prove that if all intact nodes agree on what is
-  confirmed prepared before a ballot b, then they all propose the same value
-  and this value cannot be contradicted in previous ballots.
 
 Together, those three lemmas show that SCP is guaranteed to produce a decision
 if given two long-enough consecutive ballots in which all quorums of intact
