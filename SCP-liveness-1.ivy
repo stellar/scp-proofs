@@ -84,8 +84,9 @@ object protocol = {
         }
 
         action assume_safety_properties = {
-            # safety properties proved in SCP-safety.ivy:
-            
+            # safety properties proved in SCP-safety.ivy that are necessary for this liveness proof.
+
+            # messages received from well-behaved nodes are genuine:
             assume well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V);
 
             # if intact node n2 receives accept prepare (b1,v) from all intact nodes, then it confirms
@@ -286,7 +287,7 @@ object protocol = {
     individual b0:ballot # the good ballot we consider
     
     # We assume that the n1 and n2 violate the property and we derive a contradiction.
-    # Both n1 and n2 are intact, eventually n2 leave b0 without confirming (b1,v) as prepared while n2 confirms (b1,v) as prepared.
+    # Both n1 and n2 are intact, eventually n2 leave b0 without confirming (b1,v) as prepared while n1 confirms (b1,v) as prepared.
     individual n1:node
     individual n2:node
     individual b1:ballot
@@ -329,17 +330,14 @@ object protocol = {
             
             # b0 is synchronous for intact nodes:
             conjecture intact(N1) & (well_behaved(N2) & (exists Q . is_quorum(Q) & member(N1,Q) & member(N2,Q)) | (exists S . blocks_slices(S,N1) & member(N2,S))) & intact(N3) & B <= b0 -> globally ~(left_ballot(N3,b0) & accepted_prepared(N2,B,V) & ~received_accept_prepare(N1,N2,B,V))
+
+            # "confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v)" leads to a contradiction because, if "~confirmed_prepared(n2,b1,v)", then there must be an intact node that has not accepted (b1,v) as prepared, or otherwise n2 would have confirmed (b1,v) as prepared. Thus, because the intact members of q0 have accepted (b1,v) as prepared, by the cascaded theorem there is an intact node n blocked by a set of intact nodes that have accepted (b1,v) as prepared. But then n should have received all the messages from those intact nodes (since n2 left the ballot already), and thus, since (b1,v) is never contradicted, n must have accepted prepared (b1,v) too. This is a contradiction. Ivy does this reasoning automatically given the safety conjectures proved in SCP-safety.
             
             conjecture ~(confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v))
 
             conjecture ($l2s_w . confirmed_prepared(n1,b1,v) & left_ballot(n2,b0) & ~confirmed_prepared(n2,b1,v))
 
             conjecture l2s_waiting # we never reach the freeze point.
-            
-            # those three should not be needed... just for debugging: all OKAY
-            # conjecture left_ballot(n2,b0) & intact(N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b1,v))) -> (forall N3 . member(N3,S) -> received_accept_prepare(N2,N3,b1,v))
-            # conjecture intact(N2) &  blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & received_accept_prepare(N2,N3,b1,v))) & confirmed_prepared(n1,b1,v) -> accepted_prepared(N2,b1,v)
-            # conjecture (confirmed_prepared(n1,b1,v) & left_ballot(n2,b0)) -> (confirmed_prepared(n2,b1,v) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b1,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b1,v)))))
 
         }
         
