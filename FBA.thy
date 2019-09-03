@@ -80,7 +80,7 @@ proof -
   thus ?thesis by (metis disjoint_eq_subset_Compl double_complement)
 qed
 
-subsection "Consensus clusters and intact sets"
+subsection "Intact sets"
 
 definition is_intertwined where
   "is_intertwined S \<equiv> S \<subseteq> W 
