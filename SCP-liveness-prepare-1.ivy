@@ -1,5 +1,7 @@
 #lang ivy1.6
 
+# here we prove that if intact nodes agree on what is confirmed prepared before ballot b0, and if their nomination outputs are equal, then they all vote to prepare the same thing.
+
 include order
 
 type value

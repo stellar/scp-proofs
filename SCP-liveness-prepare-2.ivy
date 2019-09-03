@@ -1,5 +1,7 @@
 #lang ivy1.6
 
+# here we prove that if intact nodes agree on what is confirmed prepared before ballot b0 and an intact node prepares value v in b0, then (b0,v) is never contradicted.
+
 include order
 
 type value
@@ -287,9 +289,6 @@ object protocol = {
             temporal property (
                 # intact nodes agree on what is confirmed prepared
                 (forall N1,N2 . intact(N1) & intact(N2) & B < b0 -> globally (started(N1,b0) & started(N2,b0) & confirmed_prepared(N1,B,V) -> confirmed_prepared(N2,B,V))) &
-                # all intact have the same nomination output in b0
-                (forall N . globally (intact(N) & started(N,b0) -> nomination_output(N,v0))) &
-                (forall N,V . globally (intact(N) & started(N,b0) & nomination_output(N,V) -> V = v0)) &
                 # no new values are confirmed prepared in previous ballots during b0:
                 (forall N . intact(N) -> globally (started(N,b0) & B < b0 & ~confirmed_prepared(N,B,V) -> globally ~confirmed_prepared(N,B,V))) &
                 # prophecy witnesses:
@@ -304,15 +303,12 @@ object protocol = {
             conjecture intact(N) -> l2s_d(N)
             conjecture l2s_d(b0) & l2s_d(n1) & l2s_d(v2) & l2s_d(v1) & l2s_d(b)
 
-            conjecture globally (intact(N) & started(N,b0) -> nomination_output(N,v0))
-            conjecture globally (intact(N) & started(N,b0) & nomination_output(N,V) -> V = v0)
             conjecture intact(N1) & intact(N2) & B < b0 -> globally (started(N1,b0) & started(N2,b0) & confirmed_prepared(N1,B,V) -> confirmed_prepared(N2,B,V))
             conjecture intact(N) -> globally (started(N,b0) & B < b0 & ~confirmed_prepared(N,B,V) -> globally ~confirmed_prepared(N,B,V))
         
             conjecture intact(N) & voted_prepared(N,B,V) -> started(N,B)
             conjecture intact(N) & voted_prepared(N,b0,V) -> (nomination_output(N,V) & (forall B . B < b0 -> forall V2 . ~confirmed_prepared(N,B,V2))) | (exists B . B < b0 & confirmed_prepared(N,B,V) & (forall B2,V2 . B2 < b0 & B <= B2 -> ~confirmed_prepared(N,B,V2)))
             
-            conjecture intact(N1) & intact(N2) & voted_prepared(N1,b0,V1) & voted_prepared(N2,b0,V2) -> V1 = V2
             conjecture intact(N1) & accepted_committed(N1,B1,V1) -> confirmed_prepared(N1,B1,V1)
             conjecture intact(N) & voted_prepared(N,b0,V) & B < b0 & accepted_committed(N,B,V2) ->  V2 = V # prepared values are never contradicted in previous rounds
 

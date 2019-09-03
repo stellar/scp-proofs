@@ -1,5 +1,7 @@
 #lang ivy1.6
 
+# Here we prove that an intact node that starts a ballot is always able to vote to prepare a value. This is because intact nodes confirm at most one value prepared per ballot number, and thus the highest confirmed prepared value is well-defined without resorting to an ordering relation on value. 
+
 include order
 
 type value
