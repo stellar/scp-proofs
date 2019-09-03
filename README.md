@@ -34,6 +34,7 @@ We prove in Isabelle/HOL that:
 * The cascade theorem holds.
 
 To browse and check FBA.thy, use [Isabelle 2019](https://isabelle.in.tum.de/).
+The file `output/document.pdf` is a PDF version of FBA.thy.
 
 # Installing and using Ivy
 
