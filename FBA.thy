@@ -187,11 +187,6 @@ lemma in_quorum:"quorum Q \<Longrightarrow> p \<in> Q \<Longrightarrow> quorum_o
 
 subsection \<open>Properties of blocking sets\<close>
 
-inductive blocking_min where
-  \<comment> \<open>This is the set of correct participants that are eventually blocked by a set @{term R} when byzantine processors do not take steps.\<close>
-  "\<lbrakk>p \<in> W; \<forall> Sl \<in> slices p . \<exists> q \<in> Sl\<inter>W . q \<in> R \<or> blocking_min R q\<rbrakk> \<Longrightarrow> blocking_min R p"
-inductive_cases blocking_min_elim:"blocking_min R p"
-
 inductive blocking_max where
   \<comment> \<open>This is the set of participants that are eventually blocked by a set @{term R} when byzantine processors help epidemic propagation.\<close>
   "\<lbrakk>p \<in> W; \<forall> Sl \<in> slices p . \<exists> q \<in> Sl . q \<in> R\<union>B \<or> blocking_max R q\<rbrakk> \<Longrightarrow> blocking_max R p"
@@ -248,5 +243,7 @@ proof -
   qed 
   thus ?thesis using that by blast
 qed
+
+end
 
 end
