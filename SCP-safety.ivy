@@ -233,137 +233,105 @@ object protocol = {
     isolate safety = {
         
         # Here we prove that two intertwined nodes never disagree.
+        
+        # the main safety property: 
+        conjecture [safety] intertwined(N1) & intertwined(N2) & confirmed_committed(N1,B1,V1) & confirmed_committed(N2,B2,V2) -> V1 = V2
+        
+        # the safety crux:
+        conjecture [crux] (exists N2 . intertwined(N2) & accepted_committed(N2,B2,V2)) & B1 <= B2 & V1 ~= V2 & (exists M . intertwined(M) & member(M,Q)) & is_quorum(Q) -> (exists N1 . well_behaved(N1) & member(N1,Q) & ~accepted_committed(N1,B1,V1))
 
-        object spec = {
-            # the main safety property: 
-            conjecture [safety] intertwined(N1) & intertwined(N2) & confirmed_committed(N1,B1,V1) & confirmed_committed(N2,B2,V2) -> V1 = V2
-        }
+        # supporting conjectures:
 
-        object impl = {
-            
-            ## the safety crux:
-            conjecture [crux] (exists N2 . intertwined(N2) & accepted_committed(N2,B2,V2)) & B1 <= B2 & V1 ~= V2 & (exists M . intertwined(M) & member(M,Q)) & is_quorum(Q) -> (exists N1 . well_behaved(N1) & member(N1,Q) & ~accepted_committed(N1,B1,V1))
+        # well-behaved nodes do not accept contradictory things:
+        conjecture well_behaved(N) & accepted_committed(N,B1,V1) & (B1 < B2 & V1 ~= V2) -> ~accepted_prepared(N,B2,V2)
+        conjecture well_behaved(N) & accepted_prepared(N,B2,V2) & (B1 < B2 & V1 ~= V2) -> ~accepted_committed(N,B1,V1)
 
-            # supporting conjectures:
+        # a well-behaved node does not accept something as committed unless it confirmed it prepared
+        conjecture well_behaved(N) & accepted_committed(N,B,V) -> confirmed_prepared(N,B,V)
 
-            # well-behaved nodes do not accept contradictory things:
-            conjecture well_behaved(N) & accepted_committed(N,B1,V1) & (B1 < B2 & V1 ~= V2) -> ~accepted_prepared(N,B2,V2)
-            conjecture well_behaved(N) & accepted_prepared(N,B2,V2) & (B1 < B2 & V1 ~= V2) -> ~accepted_committed(N,B1,V1)
+        # messages received from well-behaved nodes are authentic:
+        conjecture well_behaved(N) & received_accept_commit(N,N2,B,V) & well_behaved(N2) -> accepted_committed(N2,B,V)
+        conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
+        
+        # a well-behaved node that confirms something saw a quorum of accepts:
+        conjecture (exists N . intertwined(N) & confirmed_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_committed(N,B,V))
+        conjecture (exists N . intertwined(N) & confirmed_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_prepared(N,B,V))
 
-            # a well-behaved node does not accept something as committed unless it confirmed it prepared
-            conjecture well_behaved(N) & accepted_committed(N,B,V) -> confirmed_prepared(N,B,V)
-
-            # messages received from well-behaved nodes are authentic:
-            conjecture well_behaved(N) & received_accept_commit(N,N2,B,V) & well_behaved(N2) -> accepted_committed(N2,B,V)
-            conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
-            
-            # a well-behaved node that confirms something saw a quorum of accepts:
-            conjecture (exists N . intertwined(N) & confirmed_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_committed(N,B,V))
-            conjecture (exists N . intertwined(N) & confirmed_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_prepared(N,B,V))
-
-            # a well-behaved node does not accept different commits in the same ballot:
-            conjecture well_behaved(N) & accepted_committed(N,B,V1) & accepted_committed(N,B,V2) -> V1 = V2
-            conjecture well_behaved(N) & accepted_prepared(N,B,V1) & accepted_prepared(N,B,V2) -> V1 = V2
-            
-        }
+        # a well-behaved node does not accept different commits in the same ballot:
+        conjecture well_behaved(N) & accepted_committed(N,B,V1) & accepted_committed(N,B,V2) -> V1 = V2
+        conjecture well_behaved(N) & accepted_prepared(N,B,V1) & accepted_prepared(N,B,V2) -> V1 = V2
     } with actions, ordering_assms, qi_intertwined
 
-    # 28 extra conjs.
     isolate safety_2 = {
 
         # Now we prove more safety properties that we later use in the liveness proof. The most important property is that if an intact node confirms (b,v) prepared, then no intact node ever accepts a contradictory statement.
         
-        object spec = {
-            
-            # a confirmed prepared value cannot be contradicted.
-            conjecture [main] intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
-            
-            # left_ballot and started:
-            conjecture ~(well_behaved(N) & left_ballot(N,B) & B2 < B & ~left_ballot(N,B2))
-            conjecture ~(well_behaved(N) & started(N,B) & B0 < B & ~left_ballot(N,B0))
+        # a confirmed prepared value cannot be contradicted.
+        conjecture [main] intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
+        
+        # the two conjectures below are the crux of why the main conjecture above holds.
+        
+        # once a quorum votes unanimously to commit a value, no other value can ever be voted prepared unanimously by a quorum.
+        conjecture [crux1] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V)) & B2 > B & V2 ~= V -> forall N . intact(N) & member(N,Q) -> ~(voted_prepared(N,B2,V2) | accepted_prepared(N,B2,V2) | confirmed_prepared(N,B2,V2))
+        # a node does not prepare a value that contradicts a previous vote unless the vote was overruled (this is needed to make the previous inductive):
+        conjecture [crux2] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & intact(N1) & V1 ~= V2 & voted_prepared(N1,B1,V1) & B2 < B1 -> (~voted_committed(N1,B2,V2) | (exists N . intact(N) & member(N,Q) & left_ballot(N,B2) & ~voted_committed(N,B2,V2))) # NOTE: this conjecture is only needed for receive_accept_prepare and may be commented out for faster verification of the other actions.
+        
+        # vote means started:
+        conjecture well_behaved(N) & voted_prepared(N,B,V) -> started(N,B)
+        
+        # well-behaved nodes do not accept contradictory things:
+        conjecture intact(N) & accepted_committed(N,B1,V1) & (B1 <= B2 & V1 ~= V2) -> ~accepted_prepared(N,B2,V2)
+        conjecture intact(N) & accepted_prepared(N,B2,V2) & (B1 <= B2 & V1 ~= V2) -> ~accepted_committed(N,B1,V1)
 
-            # received messages are genuine:
-            conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
+        # a well-behaved node does not accept something as committed unless it confirmed it prepared:
+        conjecture well_behaved(N) & voted_committed(N,B,V) -> confirmed_prepared(N,B,V)
 
-            # vote means started:
-            conjecture well_behaved(N) & voted_prepared(N,B,V) -> started(N,B)
-            
-        }
+        # messages received from well-behaved nodes are authentic:
+        conjecture well_behaved(N) & received_accept_commit(N,N2,B,V) & well_behaved(N2) -> accepted_committed(N2,B,V)
+        conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
+        conjecture well_behaved(N) & received_vote_commit(N,N2,B,V) & well_behaved(N2) -> voted_committed(N2,B,V)
+        conjecture well_behaved(N) & received_vote_prepare(N,N2,B,V) & well_behaved(N2) -> voted_prepared(N2,B,V)
+        
+        # a well-behaved node that confirms/accepts something saw a quorum of accepts/votes:
+        conjecture (exists N . intact(N) & confirmed_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> accepted_committed(N,B,V))
+        conjecture (exists N . intact(N) & accepted_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V))
+        conjecture (exists N . intact(N) & confirmed_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,B,V))
+        conjecture (exists N . intact(N) & accepted_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_prepared(N,B,V))
+        
+        # an intact node does not vote/accepts different things in the same ballot:
+        conjecture intact(N) & accepted_committed(N,B,V1) & accepted_committed(N,B,V2) -> V1 = V2
+        conjecture intact(N) & accepted_prepared(N,B,V1) & accepted_prepared(N,B,V2) -> V1 = V2
+        conjecture intact(N) & voted_committed(N,B,V1) & voted_committed(N,B,V2) -> V1 = V2
+        conjecture intact(N) & voted_prepared(N,B,V1) & voted_prepared(N,B,V2) -> V1 = V2
 
-        object impl = {
-
-            # the two conjectures below are the crux of why the main conjecture above holds.
-            
-            # once a quorum votes unanimously to commit a value, no other value can ever be voted prepared unanimously by a quorum.
-            conjecture [crux1] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V)) & B2 > B & V2 ~= V -> forall N . intact(N) & member(N,Q) -> ~(voted_prepared(N,B2,V2) | accepted_prepared(N,B2,V2) | confirmed_prepared(N,B2,V2))
-            # a node does not prepare a value that contradicts a previous vote unless the vote was overruled (this is needed to make the previous inductive):
-            conjecture [crux2] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & intact(N1) & V1 ~= V2 & voted_prepared(N1,B1,V1) & B2 < B1 -> (~voted_committed(N1,B2,V2) | (exists N . intact(N) & member(N,Q) & left_ballot(N,B2) & ~voted_committed(N,B2,V2))) # NOTE: this conjecture is only needed for receive_accept_prepare and may be commented out for faster verification of the other actions.
-            
-            # well-behaved nodes do not accept contradictory things:
-            conjecture intact(N) & accepted_committed(N,B1,V1) & (B1 <= B2 & V1 ~= V2) -> ~accepted_prepared(N,B2,V2)
-            conjecture intact(N) & accepted_prepared(N,B2,V2) & (B1 <= B2 & V1 ~= V2) -> ~accepted_committed(N,B1,V1)
-
-            # a well-behaved node does not accept something as committed unless it confirmed it prepared:
-            conjecture well_behaved(N) & voted_committed(N,B,V) -> confirmed_prepared(N,B,V)
-
-            # messages received from well-behaved nodes are authentic:
-            conjecture well_behaved(N) & received_accept_commit(N,N2,B,V) & well_behaved(N2) -> accepted_committed(N2,B,V)
-            conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
-            conjecture well_behaved(N) & received_vote_commit(N,N2,B,V) & well_behaved(N2) -> voted_committed(N2,B,V)
-            conjecture well_behaved(N) & received_vote_prepare(N,N2,B,V) & well_behaved(N2) -> voted_prepared(N2,B,V)
-            
-            # a well-behaved node that confirms/accepts something saw a quorum of accepts/votes:
-            conjecture (exists N . intact(N) & confirmed_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> accepted_committed(N,B,V))
-            conjecture (exists N . intact(N) & accepted_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V))
-            conjecture (exists N . intact(N) & confirmed_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,B,V))
-            conjecture (exists N . intact(N) & accepted_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_prepared(N,B,V))
-            
-            # an intact node does not vote/accepts different things in the same ballot:
-            conjecture intact(N) & accepted_committed(N,B,V1) & accepted_committed(N,B,V2) -> V1 = V2
-            conjecture intact(N) & accepted_prepared(N,B,V1) & accepted_prepared(N,B,V2) -> V1 = V2
-            conjecture intact(N) & voted_committed(N,B,V1) & voted_committed(N,B,V2) -> V1 = V2
-            conjecture intact(N) & voted_prepared(N,B,V1) & voted_prepared(N,B,V2) -> V1 = V2
-
-            # misc:
-            conjecture ~(well_behaved(N) & left_ballot(N,B) & B2 < B & ~left_ballot(N,B2))
-            conjecture ~(well_behaved(N) & started(N,B) & B0 < B & ~left_ballot(N,B0))
-            conjecture well_behaved(N) & voted_prepared(N,B,V) -> started(N,B)
-        }
+        # left_ballot and started:
+        conjecture ~(well_behaved(N) & left_ballot(N,B) & B2 < B & ~left_ballot(N,B2))
+        conjecture ~(well_behaved(N) & started(N,B) & B0 < B & ~left_ballot(N,B0))
         
     } with actions, ordering_assms, qi_intact
 
     # A second isolate with independent properties. Speeds up verifiation.
     isolate safety_3 = {
-        
-        object spec = {
-            conjecture [c1] intact(N1) & (forall N2. intact(N2) -> received_accept_prepare(N1,N2,B,V)) -> confirmed_prepared(N1,B,V)
-            # a non-contradicted value unanimously accepted by a blocking set gets accepted.
-            conjecture [c2] intact(N1) & blocks_slices(S,N1) & (forall N2. member(N2,S) -> received_accept_prepare(N1,N2,B3,V2)) & (forall B,V . B <= B3  & accepted_committed(N1,B,V) -> V = V2)  -> accepted_prepared(N1,B3,V2)
-        }
 
-        object impl = {
-            # To prove c1 this we must show that N1 has not yet accepted anything else.
-            conjecture intact(N) & intact(N1) & accepted_prepared(N,B,V) & accepted_prepared(N1,B,V1) -> V1 = V
-            conjecture intact(N) & intact(N1) & received_accept_prepare(N,N1,B,V) -> accepted_prepared(N1,B,V)
-            conjecture well_behaved(N) & received_vote_prepare(N,N2,B,V) & well_behaved(N2) -> voted_prepared(N2,B,V)
-            conjecture (exists N . intact(N) & accepted_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_prepared(N,B,V))
-            conjecture intact(N) & voted_prepared(N,B,V1) & voted_prepared(N,B,V2) -> V1 = V2
-            conjecture well_behaved(N) & voted_prepared(N,B,V) -> started(N,B) # to show that intact nodes don't vote twice
-        }
+        conjecture [c1] intact(N1) & (forall N2. intact(N2) -> received_accept_prepare(N1,N2,B,V)) -> confirmed_prepared(N1,B,V)
+        # a non-contradicted value unanimously accepted by a blocking set gets accepted.
+        conjecture [c2] intact(N1) & blocks_slices(S,N1) & (forall N2. member(N2,S) -> received_accept_prepare(N1,N2,B3,V2)) & (forall B,V . B <= B3  & accepted_committed(N1,B,V) -> V = V2)  -> accepted_prepared(N1,B3,V2)
+        
+        # To prove c1 this we must show that N1 has not yet accepted anything else.
+        conjecture intact(N) & intact(N1) & accepted_prepared(N,B,V) & accepted_prepared(N1,B,V1) -> V1 = V
+        conjecture intact(N) & intact(N1) & received_accept_prepare(N,N1,B,V) -> accepted_prepared(N1,B,V)
+        conjecture well_behaved(N) & received_vote_prepare(N,N2,B,V) & well_behaved(N2) -> voted_prepared(N2,B,V)
+        conjecture (exists N . intact(N) & accepted_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_prepared(N,B,V))
+        conjecture intact(N) & voted_prepared(N,B,V1) & voted_prepared(N,B,V2) -> V1 = V2
+        conjecture well_behaved(N) & voted_prepared(N,B,V) -> started(N,B) # to show that intact nodes don't vote twice
         
     } with actions, ordering_assms, qi_intact
 
     # A third isolate with independent properties. Speeds up verifiation.
-    isolate liveness_supporting_conjs_3 = {
-        
-        object spec = {
-            conjecture intact(N1) & confirmed_prepared(N1,B,V)
-                -> exists Q . is_quorum(Q) & member(N1,Q) & (forall N2 . well_behaved(N2) & member(N2,Q) -> accepted_prepared(N2,B,V))
-        }
-
-        object impl = {
-            conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
-        }
+    isolate safety_4 = {
+        conjecture intact(N1) & confirmed_prepared(N1,B,V)
+            -> exists Q . is_quorum(Q) & member(N1,Q) & (forall N2 . well_behaved(N2) & member(N2,Q) -> accepted_prepared(N2,B,V))
+        conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
 
     } with actions
             
