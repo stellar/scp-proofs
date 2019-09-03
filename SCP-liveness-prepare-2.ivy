@@ -1,0 +1,328 @@
+#lang ivy1.6
+
+include order
+
+type value
+type node
+type nset # sets of nodes
+type ballot
+
+trusted isolate ordering_assms = {
+    instantiate totally_ordered(ballot)
+    # instantiate totally_ordered(value)     
+}
+
+relation well_behaved(N:node)
+relation intertwined(N:node)
+relation intact(N:node)
+
+# intact nodes are intertwined
+axiom intact(N) -> intertwined(N)
+# intertwined nodes are well-behaved
+axiom intertwined(N) -> well_behaved(N)
+
+relation member(N:node, S:nset)
+relation is_quorum(Q:nset)
+
+# quorum intersection
+# QAG edge nset -> node
+trusted isolate qi_intertwined = {
+    property (exists N1 . intertwined(N1) & is_quorum(Q1) & member(N1,Q1)) & (exists N2 . intertwined(N2) & is_quorum(Q2) & member(N2,Q2)) -> exists N3 . well_behaved(N3) & member(N3,Q1) & member(N3,Q2)
+}
+trusted isolate qi_intact = {
+    property (exists N1 . intact(N1) & is_quorum(Q1) & member(N1,Q1)) & (exists N2 . intact(N2) & is_quorum(Q2) & member(N2,Q2)) -> exists N3 . intact(N3) & member(N3,Q1) & member(N3,Q2)
+}
+
+relation blocks_slices(S:nset, N:node)
+# if set R blocks an intact node then R contains an intact node
+# QA edges Q -> N
+axiom (exists N . intact(N) & blocks_slices(S,N)) -> exists N2 . member(N2,S) & intact(N2)
+
+# the set of all intact nodes is a quorum
+# QA edges none
+axiom exists Q . (forall N . member(N,Q) <-> intact(N)) & is_quorum(Q)
+
+object protocol = {
+    
+    relation voted_prepared(N:node, B:ballot, V:value)
+    relation accepted_prepared(N:node, B:ballot, V:value)
+    relation confirmed_prepared(N:node, B:ballot, V:value)
+    relation voted_committed(N:node, B:ballot, V:value)
+    relation accepted_committed(N:node, B:ballot, V:value)
+    relation confirmed_committed(N:node, B:ballot, V:value)
+    relation nomination_output(N:node, V:value)
+    relation timer_armed(N:node)
+    relation started(N:node, B:ballot)
+    relation left_ballot(N:node, B:ballot)
+
+    # messages received
+    relation received_vote_prepare(N1:node, N2:node, B:ballot, V:value)
+    relation received_accept_prepare(N1:node, N2:node, B:ballot, V:value)
+    relation received_vote_commit(N1:node, N2:node, B:ballot, V:value)
+    relation received_accept_commit(N1:node, N2:node, B:ballot, V:value)
+
+    object actions = {
+
+        after init {
+            voted_prepared(N,B,V) := false;
+            accepted_prepared(N,B,V) := false;
+            confirmed_prepared(N,B,V) := false;
+            voted_committed(N,B,V) := false;
+            accepted_committed(N,B,V) := false;
+            confirmed_committed(N,B,V) := false;
+            nomination_output(N,X) := false;
+            left_ballot(N,B) := false;
+            started(N,B) := false;
+            timer_armed(N) := false;
+            received_vote_prepare(N1,N2,B,V) := false;
+            received_vote_commit(N1,N2,B,V) := false;
+            received_accept_prepare(N1,N2,B,V) := false;
+            received_accept_commit(N1,N2,B,V) := false;
+            
+            # here we add all intact nodes to the inital footpring; there are finitely many intact nodes, thus this is okay.
+            l2s_d(N:node) := well_behaved(N); 
+        }
+
+        action assume_safety_properties = {
+        }
+        
+        action timeout(n:node) = {
+            call assume_safety_properties();
+            
+            assume timer_armed(n);
+            local cur:ballot, suc:ballot {
+                assume ~left_ballot(n, cur) & started(n, cur);
+                assume  ~(cur < B & B < suc); # suc is the next ballot
+                call change_ballot(n, suc);
+            };
+            
+            call assume_safety_properties();
+        }
+
+        action join_ballot(n:node, b:ballot) = {
+            # QA edges N -> {B,V}
+            call assume_safety_properties();
+            
+            assume ~left_ballot(n,b) & ~started(n,b);
+            assume exists S . blocks_slices(S,n) & forall N . member(N,S) -> exists B,V . B >= b & (
+                received_vote_prepare(n,N,B,V) | received_vote_commit(n,N,B,V) | received_accept_prepare(n,N,B,V) | received_accept_commit(n,N,B,V) );
+            timer_armed(n) := false;
+            call change_ballot(n,b);
+            
+            call assume_safety_properties();
+        }
+
+        action arm_timer(n:node) = {
+            # QA edges N -> V
+            call assume_safety_properties();
+            
+            local cur:ballot {
+                assume ~left_ballot(n, cur) & started(n, cur);
+                assume exists Q . is_quorum(Q) & member(n,Q) & forall N . member(N, Q) -> exists V .
+                    received_vote_prepare(n,N,cur,V) | received_vote_commit(n,N,cur,V) | received_accept_prepare(n,N,cur,V) | received_accept_commit(n,N,cur,V);
+                timer_armed(n) := true;
+            };
+            
+            call assume_safety_properties();
+        }
+        
+        action change_ballot(n:node, b:ballot) = {
+            # QA edges none
+            call assume_safety_properties();
+            
+            assume ~left_ballot(n, b) & ~started(n, b);
+            left_ballot(n,B) := B < b;
+            started(n,b) := true;
+            timer_armed(n) := false;
+            # now vote prepared:
+            local bmax:ballot, vmax:value {
+                # use the highest confirmed prepared value or, if none exists, the nomination output:
+                # TODO we probably do not need the ordering on values: there should be a unique highest if intertwined
+                assume
+                    ((forall B,V . B < b -> ~confirmed_prepared(n,B,V)) & nomination_output(n,vmax))
+                    | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> B < bmax));
+                voted_prepared(n, b, vmax) := true; # note we vote to prepare only once per ballot.
+            };
+
+            call assume_safety_properties();            
+        }
+        
+        # n1 receives a new vote to prepare (b,v); it checks whether quorum threshold is reached and, if so, accepts (b,v) as prepared unless it accepted a different, earlier value as committed.
+        action receive_vote_prepare(na:node, nb:node, b:ballot, v:value) = {
+            # QA edges Q -> N
+            call assume_safety_properties();
+            
+            assume voted_prepared(nb,b,v);
+            received_vote_prepare(na,nb,b,v) := true;
+            if (exists Q . is_quorum(Q) & member(na,Q) &
+                   (forall N . member(N,Q) -> (received_vote_prepare(na,N,b,v) | received_accept_prepare(na,N,b,v)))) &
+               (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) & # not accepted anything contradictory
+               (forall V . ~accepted_prepared(na,b,V)) # do not accept twice
+            {
+                accepted_prepared(na,b,v) := true;
+            };
+            
+            call assume_safety_properties();
+        }
+
+        action receive_accept_prepare(na:node, nb:node, b:ballot, v:value) = {
+            # QA edges Q -> N
+            call assume_safety_properties();
+
+            assume accepted_prepared(nb,b,v);
+            received_accept_prepare(na,nb,b,v) := true;
+            if exists Q . is_quorum(Q) & member(na,Q) & forall N . member(N,Q) -> received_accept_prepare(na,N,b,v) {
+                confirmed_prepared(na,b,v) := true; # we must confirm prepared even if we left the ballot because that's used to pick the value to prepare in higher ballots.
+                if ~left_ballot(na,b)  {
+                    voted_committed(na,b,v) := true;
+                };
+            };
+            if ((exists Q . is_quorum(Q) & member(na,Q) & (forall N . member(N,Q) -> (received_vote_prepare(na,N,b,v) | received_accept_prepare(na,N,b,v)))) |
+                   (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_prepare(na,N,b,v)))) &
+                (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) & # not accepted anything contradictory
+                (forall V . ~accepted_prepared(na,b,V)) # do not accept twice
+            {
+                accepted_prepared(na,b,v) := true;
+            };
+            
+            call assume_safety_properties();
+        } 
+        action receive_vote_commit(na:node, nb:node, b:ballot, v:value) = {
+            # QA edges Q -> N
+            call assume_safety_properties();            
+
+            assume voted_committed(nb,b,v);
+            received_vote_commit(na,nb,b,v) := true;
+            if (exists Q . is_quorum(Q) & member(na,Q) &
+                   (forall N . member(N,Q) -> (received_vote_commit(na,N,b,v) | received_accept_commit(na,N,b,v)))) &
+               (forall B,V . ~(accepted_prepared(na,B,V) & b < B & V ~= v)) & # not accepted anything contradictory
+               (forall V . ~accepted_committed(na,b,V)) & # do not accept commit twice
+               (confirmed_prepared(na,b,v)) # accept committed only if confirmed prepared. NOTE: otherwise befouled nodes have no link with the previous ballots since Byzantine node can make them accept anything.
+            {
+                accepted_committed(na,b,v) := true;
+            };
+
+            call assume_safety_properties();
+        }
+
+        action receive_accept_commit(na:node, nb:node, b:ballot, v:value) = {
+            # QA edges Q -> N
+            call assume_safety_properties();
+
+            assume accepted_committed(nb,b,v);
+            received_accept_commit(na,nb,b,v) := true;
+            if exists Q . is_quorum(Q) & member(na,Q) & forall N . member(N,Q) -> received_accept_commit(na,N,b,v) {
+                confirmed_committed(na,b,v) := true;
+            };
+            if ((exists Q . is_quorum(Q) & member(na,Q) &
+                    (forall N . member(N,Q) -> (received_vote_commit(na,N,b,v) | received_accept_commit(na,N,b,v)))) |
+                (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_commit(na,N,b,v)))) &
+                (forall B,V . ~(accepted_prepared(na,B,V) & b < B & V ~= v)) & # not accepted anything contradictory
+                (forall V . ~accepted_committed(na,b,V)) & # do not accept twice.
+                (confirmed_prepared(na,b,v)) # accept committed only if confirmed prepared. NOTE: otherwise befouled nodes have no link with the previous ballots since Byzantine node can make them accept anything.
+            {
+                accepted_committed(na,b,v) := true;
+            };
+            
+            call assume_safety_properties();
+        }
+        
+        action byzantine_step = {
+            call assume_safety_properties();
+            
+            voted_prepared(N,B,X) := *;
+            assume ~(well_behaved(N) & (voted_prepared(N,B,X) ~= old voted_prepared(N,B,X)));
+            accepted_prepared(N,B,X) := *;
+            assume ~(well_behaved(N) & (accepted_prepared(N,B,X) ~= old accepted_prepared(N,B,X)));
+            voted_committed(N,B,X) := *;
+            assume ~(well_behaved(N) & (voted_committed(N,B,X) ~= old voted_committed(N,B,X)));
+            accepted_committed(N,B,X) := *;
+            assume ~(well_behaved(N) & (accepted_committed(N,B,X) ~= old accepted_committed(N,B,X)));
+            confirmed_prepared(N,B,V) := *;
+            assume ~(well_behaved(N) & (confirmed_prepared(N,B,X) ~= old confirmed_prepared(N,B,X)));
+            confirmed_committed(N,B,V) := *;
+            assume ~(well_behaved(N) & (confirmed_committed(N,B,X) ~= old confirmed_committed(N,B,X)));
+            nomination_output(N,V) := *;
+            assume ~(well_behaved(N) & (nomination_output(N,X) ~= old nomination_output(N,X)));
+            started(N,B) := *;
+            assume ~(well_behaved(N) & (started(N,B) ~= old started(N,B)));
+            left_ballot(N,B) := *;
+            assume ~(well_behaved(N) & (left_ballot(N,B) ~= old left_ballot(N,B)));
+            timer_armed(N) := *;
+            assume ~(well_behaved(N) & (timer_armed(N) ~= old timer_armed(Nv)));
+            received_vote_prepare(N1,N2,B,V) := *;
+            assume ~(well_behaved(N1) & (received_vote_prepare(N1,N2,B,V) ~= old received_vote_prepare(N1,N2,B,V)));
+            received_accept_prepare(N1,N2,B,V) := *;
+            assume ~(well_behaved(N1) & (received_accept_prepare(N1,N2,B,V) ~= old received_accept_prepare(N1,N2,B,V)));
+            received_vote_commit(N1,N2,B,V) := *;
+            assume ~(well_behaved(N1) & (received_vote_commit(N1,N2,B,V) ~= old received_vote_commit(N1,N2,B,V)));
+            received_accept_commit(N1,N2,B,V) := *;
+            assume ~(well_behaved(N1) & (received_accept_commit(N1,N2,B,V) ~= old received_accept_commit(N1,N2,B,V)));
+            
+            call assume_safety_properties();
+        }
+         
+        export receive_vote_prepare
+        export byzantine_step
+        export receive_vote_commit
+        export receive_accept_prepare
+        export receive_accept_commit
+        export change_ballot
+        # export timeout
+        # export join_ballot 
+        # export arm_timer
+
+    }
+    
+    individual b0:ballot
+    individual b:ballot
+    individual n1:node # 
+    individual v0:value # the nomination output in b0
+    individual v1:value # 
+    individual v2:value #
+    
+    isolate liveness = {
+        
+        object spec = {
+            temporal property (
+                # intact nodes agree on what is confirmed prepared
+                (forall N1,N2 . intact(N1) & intact(N2) & B < b0 -> globally (started(N1,b0) & started(N2,b0) & confirmed_prepared(N1,B,V) -> confirmed_prepared(N2,B,V))) &
+                # all intact have the same nomination output in b0
+                (forall N . globally (intact(N) & started(N,b0) -> nomination_output(N,v0))) &
+                (forall N,V . globally (intact(N) & started(N,b0) & nomination_output(N,V) -> V = v0)) &
+                # no new values are confirmed prepared in previous ballots during b0:
+                (forall N . intact(N) -> globally (started(N,b0) & B < b0 & ~confirmed_prepared(N,B,V) -> globally ~confirmed_prepared(N,B,V))) &
+                # prophecy witnesses:
+                # n1 prepares a value that can be contradicted
+                intact(n1) & v1 ~= v2 & b < b0 & eventually (voted_prepared(n1,b0,v1) & accepted_committed(n1,b,v2))
+            ) -> false
+        }
+
+        object impl = {
+            
+            # properties of the initial footprint:
+            conjecture intact(N) -> l2s_d(N)
+            conjecture l2s_d(b0) & l2s_d(n1) & l2s_d(v2) & l2s_d(v1) & l2s_d(b)
+
+            conjecture globally (intact(N) & started(N,b0) -> nomination_output(N,v0))
+            conjecture globally (intact(N) & started(N,b0) & nomination_output(N,V) -> V = v0)
+            conjecture intact(N1) & intact(N2) & B < b0 -> globally (started(N1,b0) & started(N2,b0) & confirmed_prepared(N1,B,V) -> confirmed_prepared(N2,B,V))
+            conjecture intact(N) -> globally (started(N,b0) & B < b0 & ~confirmed_prepared(N,B,V) -> globally ~confirmed_prepared(N,B,V))
+        
+            conjecture intact(N) & voted_prepared(N,B,V) -> started(N,B)
+            conjecture intact(N) & voted_prepared(N,b0,V) -> (nomination_output(N,V) & (forall B . B < b0 -> forall V2 . ~confirmed_prepared(N,B,V2))) | (exists B . B < b0 & confirmed_prepared(N,B,V) & (forall B2,V2 . B2 < b0 & B <= B2 -> ~confirmed_prepared(N,B,V2)))
+            
+            conjecture intact(N1) & intact(N2) & voted_prepared(N1,b0,V1) & voted_prepared(N2,b0,V2) -> V1 = V2
+            conjecture intact(N1) & accepted_committed(N1,B1,V1) -> confirmed_prepared(N1,B1,V1)
+            conjecture intact(N) & voted_prepared(N,b0,V) & B < b0 & accepted_committed(N,B,V2) ->  V2 = V # prepared values are never contradicted in previous rounds
+
+            conjecture intact(n1) & v1 ~= v2 & b < b0
+            conjecture ($l2s_w . (voted_prepared(n1,b0,v1) & accepted_committed(n1,b,v2))) -> (eventually (voted_prepared(n1,b0,v1) & accepted_committed(n1,b,v2))) & ~(voted_prepared(n1,b0,v1) & accepted_committed(n1,b,v2))
+            conjecture ($l2s_w . voted_prepared(n1,b0,v1) & accepted_committed(n1,b,v2)) | (voted_prepared(n1,b0,v1) & accepted_committed(n1,b,v2))
+            conjecture l2s_waiting            
+            
+        }
+        
+    } with actions, ordering_assms
+    
+}
