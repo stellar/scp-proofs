@@ -86,6 +86,16 @@ object protocol = {
         }
 
         action assume_safety_properties = {
+            assume intact(N) & confirmed_prepared(N,B,V1) & confirmed_prepared(N,B,V2) -> V1 = V2;
+            assume intact(N1) & confirmed_prepared(N1,B1,V1) & B2 < B1 & accepted_committed(N1,B2,V2) -> V1 = V2
+        }
+
+        action nomination_update(n:node, v:value) = {
+            call assume_safety_properties();
+
+            nomination_output(n,V) := V = v; 
+            
+            call assume_safety_properties();
         }
         
         action timeout(n:node) = {
@@ -273,6 +283,7 @@ object protocol = {
         # export timeout
         # export join_ballot 
         # export arm_timer
+        export nomination_update
 
     }
     
@@ -306,8 +317,11 @@ object protocol = {
             conjecture intact(N1) & intact(N2) & B < b0 -> globally (started(N1,b0) & started(N2,b0) & confirmed_prepared(N1,B,V) -> confirmed_prepared(N2,B,V))
             conjecture intact(N) -> globally (started(N,b0) & B < b0 & ~confirmed_prepared(N,B,V) -> globally ~confirmed_prepared(N,B,V))
         
+            # conjecture globally (intact(N) & started(N,b0) -> nomination_output(N,v0))
+            # conjecture globally (intact(N) & started(N,b0) & nomination_output(N,V) -> V = v0)
+            
             conjecture intact(N) & voted_prepared(N,B,V) -> started(N,B)
-            conjecture intact(N) & voted_prepared(N,b0,V) -> (nomination_output(N,V) & (forall B . B < b0 -> forall V2 . ~confirmed_prepared(N,B,V2))) | (exists B . B < b0 & confirmed_prepared(N,B,V) & (forall B2,V2 . B2 < b0 & B <= B2 -> ~confirmed_prepared(N,B,V2)))
+            conjecture intact(N) & voted_prepared(N,b0,V) -> (forall B . B < b0 -> forall V2 . ~confirmed_prepared(N,B,V2)) | (exists B . B < b0 & confirmed_prepared(N,B,V) & (forall B2,V2 . B2 < b0 & B < B2 -> ~confirmed_prepared(N,B2,V2)))
             
             conjecture intact(N1) & accepted_committed(N1,B1,V1) -> confirmed_prepared(N1,B1,V1)
             conjecture intact(N) & voted_prepared(N,b0,V) & B < b0 & accepted_committed(N,B,V2) ->  V2 = V # prepared values are never contradicted in previous rounds
