@@ -81,7 +81,13 @@ object protocol = {
             # here we add all intact nodes to the inital footpring; there are finitely many intact nodes, thus this is okay.
             l2s_d(N:node) := well_behaved(N); 
         }
-        
+
+        action nomination_update(n:node, v:value) = {
+
+            nomination_output(n,V) := V = v; 
+            
+        }
+                
         action timeout(n:node) = {
             assume timer_armed(n);
             local cur:ballot, suc:ballot {
@@ -227,6 +233,7 @@ object protocol = {
         export timeout
         export join_ballot
         export arm_timer
+        export nomination_update
 
     }
     

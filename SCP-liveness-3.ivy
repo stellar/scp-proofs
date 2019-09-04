@@ -114,6 +114,14 @@ object protocol = {
             
         }
         
+        action nomination_update(n:node, v:value) = {
+            call assume_safety_properties();
+
+            nomination_output(n,V) := V = v; 
+            
+            call assume_safety_properties();
+        }
+        
         action timeout(n:node) = {
             call assume_safety_properties();
             
@@ -298,6 +306,7 @@ object protocol = {
         export timeout
         export join_ballot # VCs are stratified except for this action
         export arm_timer
+        export nomination_update
 
     }
     
