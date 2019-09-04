@@ -138,12 +138,14 @@ object protocol = {
             started(n,b) := true;
             timer_armed(n) := false;
             # now vote prepared:
-            local bmax:ballot, vmax:value {
-                # use the highest confirmed prepared value or, if none exists, the nomination output:
-                assume
-                    ((forall B,V . B < b -> ~confirmed_prepared(n,B,V)) & nomination_output(n,vmax))
-                    | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> B < bmax));
-                voted_prepared(n, b, vmax) := true; # note we vote to prepare only once per ballot.
+            if exists VMAX . ((forall B,V . B < b -> ~confirmed_prepared(n,B,V)) & nomination_output(n,VMAX)) | exists BMAX . BMAX < b & confirmed_prepared(n,BMAX,VMAX) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> B <= BMAX) {
+                local bmax:ballot, vmax:value {
+                    # use the highest confirmed prepared value or, if none exists, the nomination output:
+                    assume
+                        ((forall B,V . B < b -> ~confirmed_prepared(n,B,V)) & nomination_output(n,vmax))
+                        | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> B <= bmax));
+                    voted_prepared(n, b, vmax) := true; # note we vote to prepare only once per ballot.
+                }
             };
 
             call assume_safety_properties();            
@@ -289,6 +291,8 @@ object protocol = {
             temporal property (
                 # all intact nodes start b0
                 (forall N . intact(N) -> eventually started(N,b0)) &
+                # intact nodes have a nomination output in b0:
+                (forall N . globally (intact(N) & started(N,b0) -> exists V . nomination_output(N,V))) &
                 # n1 never prepares:
                 intact(n1) & globally forall V . ~voted_prepared(n1,b0,V)
             ) -> false
@@ -301,6 +305,7 @@ object protocol = {
             conjecture l2s_d(b0) & l2s_d(n1) & l2s_d(v2) & l2s_d(v1) & l2s_d(b)
 
             conjecture intact(n1) & globally forall V . ~voted_prepared(n1,b0,V)
+            conjecture globally (intact(N) & started(N,b0) -> exists V . nomination_output(N,V))
             
             conjecture intact(N) & ($l2s_w N . started(N,b0))(N) -> (eventually started(N,b0)) & ~started(N,b0)
             conjecture intact(N) -> (($l2s_w N . started(N,b0))(N) | started(N,b0))

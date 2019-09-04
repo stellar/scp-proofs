@@ -118,7 +118,7 @@ object protocol = {
                 # use the highest confirmed prepared value or, if none exists, the nomination output:
                 assume
                     ((forall B,V . B < b -> ~confirmed_prepared(n,B,V)) & nomination_output(n,vmax))
-                    | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> (B < bmax)));
+                    | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> (B <= bmax)));
                 voted_prepared(n, b, vmax) := true; # note we vote to prepare only once per ballot. this may be crucial for liveness as we don't want intact nodes voting to commit different values in the same ballot.
             };
             

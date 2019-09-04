@@ -142,7 +142,7 @@ object protocol = {
                 # TODO we probably do not need the ordering on values: there should be a unique highest if intertwined
                 assume
                     ((forall B,V . B < b -> ~confirmed_prepared(n,B,V)) & nomination_output(n,vmax))
-                    | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> B < bmax));
+                    | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> B <= bmax));
                 voted_prepared(n, b, vmax) := true; # note we vote to prepare only once per ballot.
             };
 
