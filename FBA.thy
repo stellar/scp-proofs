@@ -7,8 +7,9 @@ section "Personal Byzantine quorum systems"
 text \<open>We start by proving some facts about an abstraction of FBA called a personal Byzantine quorum system (PBQS).
 For more details about PBQSs see the paper "Stellar Consensus by Instantiation", to appear at DISC 2019.\<close>
 
-locale personal_quorums =
+locale pbqs =
   fixes quorum_of :: "'node \<Rightarrow> 'node set \<Rightarrow> bool"
+  fixes W::"'node set"
   assumes quorum_assm:"\<And> p p' . \<lbrakk>p \<in> W; quorum_of p Q; p' \<in> Q\<inter>W\<rbrakk> \<Longrightarrow> \<exists> Q' . quorum_of p' Q' \<and> Q'\<subseteq>Q"
     \<comment> \<open>In other words, a quorum (of some participant) must contain a quorum of each of its members.\<close>
 begin
@@ -18,37 +19,6 @@ definition blocks where
   "blocks R p \<equiv> \<forall> Q . quorum_of p Q \<longrightarrow> Q \<inter> R \<noteq> {}"
 
 abbreviation blocked_by where "blocked_by R \<equiv> {p . blocks R p}"
-
-lemma blocked_blocked_subset_blocked:
-  "blocked_by (blocked_by R) \<subseteq> blocked_by R"
-proof -
-  have False if "p \<in> blocked_by (blocked_by R)" and "p \<notin> blocked_by R" for p
-  proof -
-    have 1:"Q \<inter> blocked_by R \<noteq> {}" if "quorum_of p Q" for Q
-      using \<open>p \<in> blocked_by (blocked_by R)\<close> that unfolding blocks_def by auto
-    have "Q \<inter> R \<noteq> {}" if " quorum_of p Q" for Q
-    proof -
-      obtain p' where "p' \<in> blocked_by R" and "p' \<in> Q"
-        using 1 \<open>quorum_of p Q\<close> by auto
-      then obtain Q' where "quorum_of p' Q'" and "Q' \<subseteq> Q"
-        using quorum_assm that \<open>quorum_of p Q\<close> by blast
-      with \<open>p' \<in> blocked_by R\<close> show "Q \<inter> R \<noteq> {}"
-        using blocks_def by fastforce
-    qed
-    hence "p \<in> blocked_by R" by (simp add: blocks_def)
-    thus False using that(2) by auto
-  qed
-  thus "blocked_by (blocked_by R) \<subseteq> blocked_by R"
-    by blast
-qed
-
-end
-
-text \<open>We now add the set of correct nodes to the model.\<close>
-
-locale with_w = personal_quorums quorum_of for quorum_of  :: "'node \<Rightarrow> 'node set \<Rightarrow> bool" +
-  fixes W::"'node set"
-begin
 
 abbreviation B where "B \<equiv> -W"
   \<comment> \<open>@{term B} is the set of malicious nodes.\<close>
@@ -72,7 +42,8 @@ proof -
     obtain Q where "quorum_of p Q" and "Q \<subseteq> W" 
       using l2 \<open>p \<in> L\<close> by auto 
     obtain p' where "p' \<in> Q \<inter> (-L)"  using 1 \<open>quorum_of p Q\<close> by auto
-    then obtain Q' where "quorum_of p' Q'" and "Q' \<subseteq> Q"  using \<open>quorum_of p Q\<close> quorum_assm by blast
+    then obtain Q' where "quorum_of p' Q'" and "Q' \<subseteq> Q"  using \<open>quorum_of p Q\<close> quorum_assm assms
+      by (metis DiffD1 IntD1 L_def \<open>Q \<subseteq> W\<close> inf.orderE)
 
     from \<open>quorum_of p' Q'\<close> and \<open> p' \<in> Q \<inter> (-L)\<close>  \<open>Q \<subseteq> W\<close> have "Q' \<inter> B \<noteq> {}" unfolding L_def blocks_def by auto
     thus False using \<open>Q \<subseteq> W\<close> \<open>Q' \<subseteq> Q\<close> by auto
@@ -87,7 +58,7 @@ definition is_intertwined where
     \<and> (\<forall> Q Q' . quorum_of_set S Q \<and> quorum_of_set S Q' \<longrightarrow> W \<inter> Q \<inter> Q' \<noteq> {})"
 
 definition is_intact where
-  \<comment> \<open>This is equivalent to the notion of intact set presented in the Stellar Whitepaper~\cite{MazieresStellarConsensusProtocol2015}\<close>
+  \<comment> \<open>NOTE: This is weaker than the notion of intact set presented in the Stellar Whitepaper~\cite{MazieresStellarConsensusProtocol2015}.\<close>
   "is_intact I \<equiv> I \<subseteq> W \<and> (\<forall> p \<in> I . \<exists> Q \<subseteq> I . quorum_of p Q)
       \<and> (\<forall> Q Q' . quorum_of_set I Q \<and> quorum_of_set I Q' \<longrightarrow> I \<inter> Q \<inter> Q' \<noteq> {})"
 
@@ -100,35 +71,45 @@ proof -
   have "I\<^sub>1 \<union> I\<^sub>2 \<subseteq> W"
     using assms(1) assms(2) is_intact_def by auto
   moreover
+
+  text \<open>Next, we prove quorum availability (this is trivial):\<close>
   have "\<forall> p \<in> (I\<^sub>1\<union>I\<^sub>2) . \<exists> Q \<subseteq> (I\<^sub>1\<union>I\<^sub>2) . quorum_of p Q" 
     using \<open>is_intact I\<^sub>1\<close> \<open>is_intact I\<^sub>2\<close> unfolding is_intact_def
     by (meson UnE le_supI1 le_supI2)
   moreover
+
+  text \<open>Finally, we prove quorum intersection, which is a little harder:\<close>
   have "(I\<^sub>1\<union>I\<^sub>2) \<inter> Q\<^sub>1 \<inter> Q\<^sub>2 \<noteq> {}"
     if "quorum_of_set (I\<^sub>1\<union>I\<^sub>2) Q\<^sub>1" and "quorum_of_set (I\<^sub>1\<union>I\<^sub>2) Q\<^sub>2" 
     for Q\<^sub>1 Q\<^sub>2
   proof -
-    have "(I\<^sub>1\<union>I\<^sub>2) \<inter> Q\<^sub>1 \<inter> Q\<^sub>2 \<noteq> {}" if "quorum_of_set I Q\<^sub>1" and "quorum_of_set I Q\<^sub>2" and "I = I\<^sub>1 \<or> I = I\<^sub>2" for I
-      using \<open>is_intact I\<^sub>1\<close> \<open>is_intact I\<^sub>2\<close> \<open>quorum_of_set (I\<^sub>1\<union>I\<^sub>2) Q\<^sub>1\<close> \<open>quorum_of_set (I\<^sub>1\<union>I\<^sub>2) Q\<^sub>2\<close> that
-      unfolding quorum_of_set_def is_intact_def
-      by (metis inf_assoc inf_bot_right inf_sup_absorb sup_commute)
-    moreover
+    text \<open>First we generalize to avoid repeating the argument twice:\<close>
     have \<open>(I\<^sub>1\<union>I\<^sub>2) \<inter> Q\<^sub>1 \<inter> Q\<^sub>2 \<noteq> {}\<close>  if "is_intact I\<^sub>1" and "is_intact I\<^sub>2"
       and "I\<^sub>1 \<inter> I\<^sub>2 \<noteq> {}" and "quorum_of_set I\<^sub>1 Q\<^sub>1" and "quorum_of_set I\<^sub>2 Q\<^sub>2"
-    for I\<^sub>1 I\<^sub>2 \<comment> \<open>We generalize to avoid repeating the argument twice\<close>
+    for I\<^sub>1 I\<^sub>2
     proof -
-      obtain p Q where "quorum_of p Q" and "p \<in> I\<^sub>1 \<inter> I\<^sub>2" and "Q \<subseteq> I\<^sub>2" 
+      obtain p Q where "quorum_of p Q" and "p \<in> I\<^sub>1 \<inter> I\<^sub>2" and "Q \<subseteq> I\<^sub>2"
         using \<open>I\<^sub>1 \<inter> I\<^sub>2 \<noteq> {}\<close> \<open>is_intact I\<^sub>2\<close> unfolding is_intact_def by blast
-      have "Q \<inter> Q\<^sub>1 \<noteq> {}" using \<open>is_intact I\<^sub>1\<close> \<open>quorum_of_set I\<^sub>1 Q\<^sub>1\<close> \<open>quorum_of p Q\<close> \<open>p \<in> I\<^sub>1 \<inter> I\<^sub>2\<close>
+      moreover
+      obtain p\<^sub>1 where "quorum_of p\<^sub>1 Q\<^sub>1" and "p\<^sub>1 \<in> I\<^sub>1"
+        using \<open>quorum_of_set I\<^sub>1 Q\<^sub>1\<close> quorum_of_set_def by auto
+      obtain p' where "p' \<in> Q \<inter> Q\<^sub>1" using \<open>is_intact I\<^sub>1\<close> \<open>quorum_of_set I\<^sub>1 Q\<^sub>1\<close> \<open>quorum_of p Q\<close> \<open>p \<in> I\<^sub>1 \<inter> I\<^sub>2\<close>
         unfolding is_intact_def quorum_of_set_def
-        by (metis Int_assoc Int_iff inf_bot_right)
-      then obtain Q\<^sub>1' where "quorum_of_set I\<^sub>2 Q\<^sub>1'" and "Q\<^sub>1'\<subseteq>Q\<^sub>1"  
-        using \<open>Q \<subseteq> I\<^sub>2\<close> \<open>quorum_of_set I\<^sub>1 Q\<^sub>1\<close> quorum_assm unfolding quorum_of_set_def by blast 
-      thus "(I\<^sub>1\<union>I\<^sub>2) \<inter> Q\<^sub>1 \<inter> Q\<^sub>2 \<noteq> {}" using \<open>is_intact I\<^sub>2\<close> \<open>quorum_of_set I\<^sub>2 Q\<^sub>2\<close>
-        unfolding is_intact_def by blast
+        by (metis Int_iff all_not_in_conv)
+      moreover have "p' \<in> W" and "p\<^sub>1 \<in> W" and "p' \<in> I\<^sub>2" sorry
+      ultimately obtain Q' where "quorum_of p' Q'" and "Q' \<subseteq> Q\<^sub>1"
+        using quorum_assm[of p\<^sub>1 Q\<^sub>1] \<open>quorum_of p\<^sub>1 Q\<^sub>1\<close>
+        by (meson Int_iff)
+      hence "Q' \<inter> Q\<^sub>2 \<inter> I\<^sub>2 \<noteq> {}" using \<open>is_intact I\<^sub>2\<close> \<open>quorum_of_set I\<^sub>2 Q\<^sub>2\<close> \<open>p' \<in> I\<^sub>2\<close> 
+        unfolding quorum_of_set_def is_intact_def
+        by (metis inf_assoc inf_sup_aci(1))
+      thus "(I\<^sub>1\<union>I\<^sub>2) \<inter> Q\<^sub>1 \<inter> Q\<^sub>2 \<noteq> {}"
+        using \<open>Q' \<subseteq> Q\<^sub>1\<close> by blast 
     qed
-    ultimately show ?thesis using assms that unfolding quorum_of_set_def by auto 
+    thus ?thesis using assms that unfolding quorum_of_set_def by auto 
   qed
+
+  text \<open>Now we have all the properties of intact sets:\<close>
   ultimately show ?thesis using assms
     unfolding is_intact_def by simp
 qed
@@ -166,10 +147,9 @@ lemma is_pbqs:
   using assms
   by (simp add: quorum_def quorum_of_def)
 
-interpretation with_w quorum_of 
+interpretation pbqs quorum_of 
   \<comment> \<open>Stellar quorums form a personal quorum system.\<close>
-  unfolding with_w_def personal_quorums_def 
-  quorum_def quorum_of_def by blast 
+  unfolding pbqs_def quorum_def quorum_of_def by blast 
 
 lemma quorum_is_quorum_of_some_slice:
   assumes "quorum_of p Q" and "p \<in> W"
@@ -212,6 +192,8 @@ lemma intact_has_intact_slice:
   using assms unfolding is_intact_def quorum_of_set_def quorum_of_def quorum_def
   by (metis Int_commute  empty_iff inf.order_iff  inf_bot_right le_infI1)
 
+text \<open>Now the theorem:\<close>
+
 theorem blocking_max_intersects_intact:
   \<comment> \<open>if @{term \<open>R\<close>} blocks @{term \<open>p\<close>} when malicious participants help epidemic propagation, 
 and @{term p} belongs to an intact set @{term S}, then @{term \<open>R \<inter> S \<noteq> {}\<close>}\<close>
@@ -226,11 +208,13 @@ proof (induct)
     using "1.hyps" assms(2) by fastforce
 qed
 
-text \<open>We now prove the cascade theorem\<close>
+text \<open>Next we prove the cascade theorem\<close>
 
 theorem cascade_thm:
   assumes "is_intact I" and "p \<in> I" and "quorum_of p Q" and "Q \<subseteq> S"
-  obtains "I \<subseteq> S" | "\<exists> p' \<in> (W-S) . (\<forall> s \<in> slices p' . s \<inter> S \<inter> W \<noteq> {})" 
+  obtains "I \<subseteq> S" | "\<exists> p' \<in> (W-S) . (\<forall> s \<in> slices p' . s \<inter> S \<inter> W \<noteq> {})"
+    \<comment> \<open>Here we need potentially befouled nodes to help propagation...\<close>
+  nitpick[card 'node=4, verbose, expect=none]
 proof -
   have False if 1:"\<forall> p' \<in> (W-S) . (\<exists> s \<in> slices p' . s \<inter> S \<inter> W = {})" and 2:"\<not>I\<subseteq>S"
   proof -
@@ -241,9 +225,8 @@ proof -
     ultimately show False using \<open>p\<in>I\<close> and \<open>quorum_of p Q\<close>  and \<open>is_intact I\<close> 
       unfolding is_intact_def quorum_of_set_def by blast
   qed 
-  thus ?thesis using that by blast
+  thus ?thesis using that
+    by auto
 qed
-
-end
 
 end
