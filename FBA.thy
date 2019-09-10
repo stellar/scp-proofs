@@ -16,9 +16,6 @@ begin
 definition quorum where
   "quorum Q \<equiv> \<forall> p \<in> Q \<inter> W . (\<exists> Sl \<in> slices p . Sl \<subseteq> Q)"
 
-definition quorum_of where
-  "quorum_of p Q \<equiv> p \<in> Q \<and> quorum Q"
-
 end
 
 section \<open>The Cascade Theorem\<close>
