@@ -243,30 +243,24 @@ object protocol = {
         
         # the main safety property: 
         conjecture [safety] intertwined(N1) & intertwined(N2) & confirmed_committed(N1,B1,V1) & confirmed_committed(N2,B2,V2) -> V1 = V2
-        
-        # the safety crux:
-        conjecture [crux] (exists N2 . intertwined(N2) & accepted_committed(N2,B2,V2)) & B1 <= B2 & V1 ~= V2 & (exists M . intertwined(M) & member(M,Q)) & is_quorum(Q) -> (exists N1 . well_behaved(N1) & member(N1,Q) & ~accepted_committed(N1,B1,V1))
-
-        # supporting conjectures:
-
-        # well-behaved nodes do not accept contradictory things:
-        conjecture well_behaved(N) & accepted_committed(N,B1,V1) & (B1 < B2 & V1 ~= V2) -> ~accepted_prepared(N,B2,V2)
-        conjecture well_behaved(N) & accepted_prepared(N,B2,V2) & (B1 < B2 & V1 ~= V2) -> ~accepted_committed(N,B1,V1)
 
         # a well-behaved node does not accept something as committed unless it confirmed it prepared
         conjecture well_behaved(N) & accepted_committed(N,B,V) -> confirmed_prepared(N,B,V)
+
+        # well-behaved nodes do not accept contradictory things:
+        conjecture well_behaved(N) & accepted_prepared(N,B2,V2) & (B1 < B2 & V1 ~= V2) -> ~accepted_committed(N,B1,V1)
+
+        # a well-behaved node that confirms something saw a quorum of accepts:
+        conjecture (exists N . intertwined(N) & confirmed_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_committed(N,B,V))
+        conjecture (exists N . intertwined(N) & confirmed_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_prepared(N,B,V))
 
         # messages received from well-behaved nodes are authentic:
         conjecture well_behaved(N) & received_accept_commit(N,N2,B,V) & well_behaved(N2) -> accepted_committed(N2,B,V)
         conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
         
-        # a well-behaved node that confirms something saw a quorum of accepts:
-        conjecture (exists N . intertwined(N) & confirmed_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_committed(N,B,V))
-        conjecture (exists N . intertwined(N) & confirmed_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_prepared(N,B,V))
-
-        # a well-behaved node does not accept different commits in the same ballot:
-        conjecture well_behaved(N) & accepted_committed(N,B,V1) & accepted_committed(N,B,V2) -> V1 = V2
+        # a well-behaved node does not accept different values as prepared in the same ballot:
         conjecture well_behaved(N) & accepted_prepared(N,B,V1) & accepted_prepared(N,B,V2) -> V1 = V2
+
     } with actions, ordering_assms, qi_intertwined
 
     isolate safety_2 = {
