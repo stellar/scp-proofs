@@ -26,12 +26,19 @@ locale intact = \<comment> \<open>Here we fix an intact set @{term I} and prove 
   orig:FBAS slices W 
   + proj:FBAS "project slices I" W \<comment> \<open>We consider the projection of the system on @{term I}.\<close>
   for slices W I +
-  assumes "I \<subseteq> W" \<comment> \<open>An intact set is a set @{term I} satisfying those three assumptions.\<close>
+  assumes intact_wb:"I \<subseteq> W" \<comment> \<open>An intact set is a set @{term I} satisfying those three assumptions.\<close>
     and q_avail:"orig.quorum I" \<comment> \<open>@{term I} is a quorum in the original system.\<close>
     and q_inter:"\<And> Q Q' . \<lbrakk>proj.quorum Q; proj.quorum Q'; Q \<inter> I \<noteq> {}; Q' \<inter> I \<noteq> {}\<rbrakk>  \<Longrightarrow> Q \<inter> Q' \<inter> I \<noteq> {}" 
     \<comment> \<open>Any two sets that intersect @{term I} and that are quorums in the projected system intersect in @{term I}.
 Note that requiring that @{text \<open>Q \<inter> Q' \<noteq> {}\<close>} instead of @{text \<open>Q \<inter> Q' \<inter> I \<noteq> {}\<close>} would be equivalent.\<close>
 begin
+
+theorem blocking_safe: \<comment> \<open>A set that blocks an intact node contains an intact node. If this were not the case, quorum availability would trivially be violated.\<close>
+  fixes S n
+  assumes "n\<in>I" and "\<forall> Sl\<in> slices n .Sl\<inter>S \<noteq> {}"
+  shows "S \<inter> I \<noteq> {}"
+  using assms q_avail intact_wb unfolding orig.quorum_def 
+  by auto (metis inf.absorb_iff2 inf_assoc inf_bot_right inf_sup_aci(1)) 
 
 theorem cascade:
 \<comment> \<open>If @{term U} is a quorum of an intact node and @{term S} is a super-set of @{term U}, then either @{term S} includes 
