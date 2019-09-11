@@ -29,7 +29,8 @@ locale intact = \<comment> \<open>Here we fix an intact set @{term I} and prove 
   assumes "I \<subseteq> W" \<comment> \<open>An intact set is a set @{term I} satisfying those three assumptions.\<close>
     and q_avail:"orig.quorum I" \<comment> \<open>@{term I} is a quorum in the original system.\<close>
     and q_inter:"\<And> Q Q' . \<lbrakk>proj.quorum Q; proj.quorum Q'; Q \<inter> I \<noteq> {}; Q' \<inter> I \<noteq> {}\<rbrakk>  \<Longrightarrow> Q \<inter> Q' \<inter> I \<noteq> {}" 
-    \<comment> \<open>Any two sets that intersect @{term I} and that are quorums in the projected system intersect in @{term I}.\<close>
+    \<comment> \<open>Any two sets that intersect @{term I} and that are quorums in the projected system intersect in @{term I}.
+Note that requiring that @{text \<open>Q \<inter> Q' \<noteq> {}\<close>} instead of @{text \<open>Q \<inter> Q' \<inter> I \<noteq> {}\<close>} would be equivalent.\<close>
 begin
 
 theorem cascade:
@@ -120,7 +121,7 @@ This is the only interesting part of the proof.\<close>
   have "Q\<^sub>1 \<inter> Q\<^sub>2 \<inter> (I\<^sub>1\<union>I\<^sub>2) \<noteq> {}" 
     if "i1.proj.quorum Q\<^sub>1" and "i1.proj.quorum Q\<^sub>2" and "Q\<^sub>1 \<inter> I\<^sub>1 \<noteq> {}" and "Q\<^sub>2 \<inter> I\<^sub>1 \<noteq> {}"
     for Q\<^sub>1 Q\<^sub>2
-    by (simp add: Int_Un_distrib i1.q_inter that(1) that(2) that(3) that(4))  
+    by (simp add: Int_Un_distrib i1.q_inter that)  
   moreover
   have "Q\<^sub>1 \<inter> Q\<^sub>2 \<inter> (I\<^sub>1\<union>I\<^sub>2) \<noteq> {}"
     if "i2.proj.quorum Q\<^sub>1" and "i2.proj.quorum Q\<^sub>2" and "Q\<^sub>1 \<inter> I\<^sub>2 \<noteq> {}" and "Q\<^sub>2 \<inter> I\<^sub>2 \<noteq> {}"
