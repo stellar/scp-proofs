@@ -265,10 +265,11 @@ object protocol = {
 
     isolate safety_2 = {
 
-        # Now we prove more safety properties that we later use in the liveness proof. The most important property is that if an intact node confirms (b,v) prepared, then no intact node ever accepts a contradictory statement.
+        # We now prove more safety properties that we later use in the liveness proof. The most important property is that if an intact node confirms (b,v) prepared, then no intact node ever accepts a contradictory statement.
         
         # a confirmed prepared value cannot be contradicted.
         conjecture [main] intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
+        conjecture [main2] intact(N1) & accepted_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
         
         # the two conjectures below are the crux of why the main conjecture above holds.
         
