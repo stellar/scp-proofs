@@ -88,10 +88,12 @@ other notion of what SCP is.
 The model consists of an initial state and a collection of actions, which are
 atomic steps that update the global state of the system. Actions model what
 nodes do upon receiving messages or upon timers firing. Each action consists of
-preconditions (expressed using `assume` statements) and state updates.
-An execution of the model is a sequence of global states, starting with the
+preconditions (expressed using `assume` statements) and state updates. An
+execution of the model is a sequence of global states, starting with the
 initial state, and such that each state is obtained from the preceding state by
-applying an action whose preconditions are satisfied.
+applying an action whose preconditions are satisfied. This is an instance of
+Lamport's Standard Model, used e.g. in TLA+, which Lamport discusses in his
+Turing Award lecture.
 
 Preconditions and state updates are specified using First-Order Logic formulas.
 By convention, all unbound upper-case variables are taken to be universally
