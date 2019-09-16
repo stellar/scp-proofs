@@ -105,9 +105,11 @@ preconditions of the actions are too strong or even contradictory, and then
 prove that there is no safety violation. Such a proof would obviously be
 meaningless. In fact, the `change_ballot` action had a contradictory assumption
 at some point during the development of the SCP model, which was latter fixed
-in commit 3a403d0. One way to ensure that the model does do something is to
-prove liveness properties, e.g. than in every execution, every intact node
-eventually decides. We discuss the liveness of SCP below.
+in commit
+[3a403d0](https://github.com/stellar/scp-proofs/commit/3a403d09e85097dafef96f5639f619c4f123a99f).
+One way to ensure that the model does do something is to prove liveness
+properties, e.g. than in every execution, every intact node eventually decides.
+We discuss the liveness of SCP below.
 
 ### Abstractions
 
