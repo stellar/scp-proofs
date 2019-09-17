@@ -300,10 +300,10 @@ object protocol = {
             temporal property (
                 # intact nodes agree on what is confirmed prepared
                 (forall N1,N2 . intact(N1) & intact(N2) & B < b0 -> globally (started(N1,b0) & started(N2,b0) & confirmed_prepared(N1,B,V) -> confirmed_prepared(N2,B,V))) &
-                # no new values are confirmed prepared in previous ballots during b0:
+                # no new values are confirmed prepared in previous ballots during b0 (nodes already received all the messages sent in previous ballots):
                 (forall N . intact(N) -> globally (started(N,b0) & B < b0 & ~confirmed_prepared(N,B,V) -> globally ~confirmed_prepared(N,B,V))) &
                 # prophecy witnesses:
-                # n1 prepares a value that can be contradicted
+                # n1 prepares a value that is eventually contradicted
                 intact(n1) & v1 ~= v2 & b < b0 & eventually (voted_prepared(n1,b0,v1) & accepted_committed(n1,b,v2))
             ) -> false
         }
