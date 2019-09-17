@@ -353,11 +353,12 @@ object protocol = {
 
             # properties of the initial footprint:
             conjecture intact(N) -> l2s_d(N)
+            conjecture l2s_d(n0) & l2s_d(b0)
+
+            conjecture intact(n0)
             
             # (L0) intact nodes eventually vote to prepare v0 in b0:
-            conjecture intact(N) -> (($l2s_w N . voted_prepared(N,b0,v0))(N) | voted_prepared(N,b0,v0) | globally ~voted_prepared(N,b0,v0))
-            conjecture intact(N) & ($l2s_w N . voted_prepared(N,b0,v0))(N) -> eventually voted_prepared(N,b0,v0)
-            conjecture intact(N) -> ($l2s_w N . voted_prepared(N,b0,v0))(N) | voted_prepared(N,b0,v0)
+            conjecture intact(N) -> (($l2s_w N . voted_prepared(N,b0,v0))(N) & eventually voted_prepared(N,b0,v0)) | voted_prepared(N,b0,v0)
 
             # (L1) intact nodes never leave b0
             conjecture intact(N) -> globally ~left_ballot(N,b0)
@@ -367,8 +368,8 @@ object protocol = {
             
             # (L3) thus n0 never receives accept_commit from intact node n1:
             conjecture exists N . intact(N) & ~received_accept_commit(n0,N,b0,v0) # otherwise, n0 would confirm (b0,v0) as committed.
+            conjecture intact(N) & (globally ~received_accept_commit(n0,N,b0,v0)) -> intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0) # by the prophecy assumption
             conjecture intact(N) -> (($l2s_w N . received_accept_commit(n0,N,b0,v0))(N) | received_accept_commit(n0,N,b0,v0) | globally ~received_accept_commit(n0,N,b0,v0))
-            conjecture intact(N) & (globally ~received_accept_commit(n0,N,b0,v0)) -> intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0)
             conjecture (exists N . intact(N) & ($l2s_w N . received_accept_commit(n0,N,b0,v0))(N)) | (intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0))
             
             # (L4) thus n1 never accepts (b0,v0) as committed:
