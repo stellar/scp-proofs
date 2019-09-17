@@ -5,14 +5,14 @@
 
 include order
 
-type value
+type value # values are completely abstract; we do not even need an ordering on values.
 type node
-type nset # sets of nodes
+type nset # sets of nodes.
 type ballot
 
 trusted isolate ordering_assms = {
-    instantiate totally_ordered(ballot)
-    #instantiate totally_ordered(value)     
+    # the only assumption we make about ballots is that they are totally ordered.
+    instantiate totally_ordered(ballot)   
 }
 
 relation well_behaved(N:node)
@@ -24,10 +24,10 @@ axiom intact(N) -> intertwined(N)
 # intertwined nodes are well-behaved
 axiom intertwined(N) -> well_behaved(N)
 
-relation member(N:node, S:nset)
-relation is_quorum(Q:nset)
+relation member(N:node, S:nset) # N belongs to S
+relation is_quorum(Q:nset) # Q  is a quorum
 
-# quorum intersection
+# the quorum-intersection assumptions
 # QAG edge nset -> node
 trusted isolate qi_intertwined = {
     property (exists N1 . intertwined(N1) & is_quorum(Q1) & member(N1,Q1)) & (exists N2 . intertwined(N2) & is_quorum(Q2) & member(N2,Q2)) -> exists N3 . well_behaved(N3) & member(N3,Q1) & member(N3,Q2)
@@ -36,7 +36,7 @@ trusted isolate qi_intact = {
     property (exists N1 . intact(N1) & is_quorum(Q1) & member(N1,Q1)) & (exists N2 . intact(N2) & is_quorum(Q2) & member(N2,Q2)) -> exists N3 . intact(N3) & member(N3,Q1) & member(N3,Q2)
 }
 
-relation blocks_slices(S:nset, N:node)
+relation blocks_slices(S:nset, N:node) # S intersects all the slices of N
 # if set R blocks an intact node then R contains an intact node
 # QA edges Q -> N
 axiom (exists N . intact(N) & blocks_slices(S,N)) -> exists N2 . member(N2,S) & intact(N2)
@@ -44,6 +44,10 @@ axiom (exists N . intact(N) & blocks_slices(S,N)) -> exists N2 . member(N2,S) & 
 # the set of all intact nodes is a quorum
 # QA edges none
 axiom exists Q . (forall N . member(N,Q) <-> intact(N)) & is_quorum(Q)
+
+# NOTE: the cascade theorem is a higher-order property that we cannot express in first-order logic. Instead, we instantiate it only when needed using assume statements in the transition system. This happens in SCP-liveness-1.ivy:
+# assume is_quorum(q0) & (exists N0 . intact(N0) & member(N0,q0)) & (forall N . intact(N) & member(N,q0) -> accepted_prepared(N,b1,v)) -> ((forall N1 . intact(N1) -> accepted_prepared(N1,b1,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b1,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b1,v)))));
+# In English: if a set of nodes including a quorum of an intact node accepts (b,v), then either all intact accept (b,v) or there is an intact node blocked by a set of intact node that all accept (b,v).
 
 object protocol = {
     
@@ -91,8 +95,6 @@ object protocol = {
             assume intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2;
 
             # a well-behaved node does not accept something as committed unless it confirmed it prepared:
-            assume well_behaved(N) & voted_committed(N,B,V) -> confirmed_prepared(N,B,V);
-            
             assume intact(N) & voted_committed(N,B,V) -> confirmed_prepared(N,B,V);
             assume intact(N) & accepted_committed(N,B,V) -> confirmed_prepared(N,B,V);
 
@@ -102,7 +104,7 @@ object protocol = {
             assume intact(N) & voted_prepared(N,B,V) -> started(N,B);
             assume intact(N) & accepted_prepared(N,B,V1) & accepted_prepared(N,B,V2) -> V1 = V2;
 
-            # messages are authentic
+            # messages from intact nodes are authentic:
             assume intact(N) & intact(N1) & received_vote_prepare(N,N1,B,V) -> voted_prepared(N1,B,V);
             assume intact(N) & intact(N1) & received_accept_prepare(N,N1,B,V) -> accepted_prepared(N1,B,V);
             assume intact(N) & intact(N1) & received_vote_commit(N,N1,B,V) -> voted_committed(N1,B,V);
@@ -335,7 +337,7 @@ object protocol = {
                 # all intact nodes vote to prepare (b0,v0):
                 (forall N . intact(N) -> eventually voted_prepared(N,b0,v0)) &
                 # "prepare (b0,v0)" is never contradicted
-                (forall N . intact(N) & B < b0 & V ~= v0 -> globally ~accepted_committed(N,B,V)) &
+                (forall N . intact(N) & B < b0 & V ~= v0 -> globally ~accepted_committed(N,B,V)) & # TODO: this assumption is unecessary because it follows from the previous
                 # prophecy witnesses:
                 ((exists N . intact(N) & globally ~received_accept_commit(n0,N,b0,v0)) -> (intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0))) &
                 ((exists N . intact(N) & globally ~received_vote_commit(n1,N,b0,v0)) -> (intact(n2) & globally ~received_vote_commit(n1,n2,b0,v0))) &
@@ -354,8 +356,8 @@ object protocol = {
             
             # (L0) intact nodes eventually vote to prepare v0 in b0:
             conjecture intact(N) -> (($l2s_w N . voted_prepared(N,b0,v0))(N) | voted_prepared(N,b0,v0) | globally ~voted_prepared(N,b0,v0))
-            conjecture intact(N) & ($l2s_w N . voted_prepared(N,b0,v0))(N) -> ~globally ~voted_prepared(N,b0,v0)
-            conjecture intact(N) -> (($l2s_w N . voted_prepared(N,b0,v0))(N) | voted_prepared(N,b0,v0))
+            conjecture intact(N) & ($l2s_w N . voted_prepared(N,b0,v0))(N) -> eventually voted_prepared(N,b0,v0)
+            conjecture intact(N) -> ($l2s_w N . voted_prepared(N,b0,v0))(N) | voted_prepared(N,b0,v0)
 
             # (L1) intact nodes never leave b0
             conjecture intact(N) -> globally ~left_ballot(N,b0)
@@ -366,7 +368,7 @@ object protocol = {
             # (L3) thus n0 never receives accept_commit from intact node n1:
             conjecture exists N . intact(N) & ~received_accept_commit(n0,N,b0,v0) # otherwise, n0 would confirm (b0,v0) as committed.
             conjecture intact(N) -> (($l2s_w N . received_accept_commit(n0,N,b0,v0))(N) | received_accept_commit(n0,N,b0,v0) | globally ~received_accept_commit(n0,N,b0,v0))
-            conjecture intact(N) & (globally ~received_accept_commit(n0,N,b0,v0)) -> (intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0))
+            conjecture intact(N) & (globally ~received_accept_commit(n0,N,b0,v0)) -> intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0)
             conjecture (exists N . intact(N) & ($l2s_w N . received_accept_commit(n0,N,b0,v0))(N)) | (intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0))
             
             # (L4) thus n1 never accepts (b0,v0) as committed:
@@ -375,7 +377,7 @@ object protocol = {
             #conjecture intact(n1) & accepted_committed(n1,b0,v0) -> (($l2s_w N1,N2,V. received_accept_commit(N1,N2,b0,V))(n0,n1,v0) | received_accept_commit(n0,n1,b0,v0))
             conjecture intact(n1) & (globally ~received_accept_commit(n0,n1,b0,v0)) -> (($l2s_w N1,N2,V. received_accept_commit(N1,N2,b0,V))(n0,n1,v0) | ~accepted_committed(n1,b0,v0))
 
-            # (L5) moreover, from (L0), "accept commit (b0,v0)" is never contradicted:
+            # (L5) moreover, from L1, "accept commit (b0,v0)" is never contradicted:
             conjecture  intact(N) -> ~(accepted_prepared(N,B,V) & b0 < B)
 
             # (L6) moreover, with L0, intact nodes never accept anything different from v0 as committed in b0:
