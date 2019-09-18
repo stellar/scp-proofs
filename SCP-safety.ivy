@@ -155,9 +155,9 @@ object protocol = {
                 };
             };
             if ((exists Q . is_quorum(Q) & member(na,Q) & (forall N . member(N,Q) -> (received_vote_prepare(na,N,b,v) | received_accept_prepare(na,N,b,v)))) |
-                   (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_prepare(na,N,b,v)))) &
-                (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) & # not accepted anything contradictory
-                (forall V . ~accepted_prepared(na,b,V)) # do not accept twice
+                   (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_prepare(na,N,b,v)))) # &
+                # (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) & # not accepted anything contradictory
+                # (forall V . ~accepted_prepared(na,b,V)) # do not accept twice
             {
                 accepted_prepared(na,b,v) := true;
             };
@@ -265,6 +265,20 @@ object protocol = {
 
     isolate safety_2 = {
 
+        # TODO: this shows that a value unanimously voted prepared cannot be contradicted regardless of any liveness assumption. Use this in the liveness proof to simply it.
+
+        # tests
+        
+        conjecture (forall N . intact(N) -> voted_prepared(N,B,V)) & intact(N2) & accepted_committed(N2,B2,V2) & B2 < B -> V = V2 #BUG: renaming N2 to N confuses Ivy here
+
+        conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & accepted_prepared(N2,B0,V1) -> V0 = V1
+        conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & B < B0 & accepted_committed(N2,B,V1) -> V0 = V1
+        
+        conjecture intact(N2) & (forall B,V . B < B0 & accepted_committed(N2,B,V) -> V = V0) & blocks_slices(S,N2) & (forall N3. member(N3,S) -> received_accept_prepare(N2,N3,B0,V0)) -> accepted_prepared(N2,B0,V0)
+        conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & blocks_slices(S,N2) & (forall N3. member(N3,S) -> received_accept_prepare(N2,N3,B0,V0)) -> accepted_prepared(N2,B0,V0)
+
+        # end tests
+        
         # We now prove more safety properties that we later use in the liveness proof. The most important property is that if an intact node confirms (b,v) prepared, then no intact node ever accepts a contradictory statement.
         
         # a confirmed prepared value cannot be contradicted.
@@ -274,8 +288,8 @@ object protocol = {
         # the two conjectures below are the crux of why the main conjecture above holds.
         
         # once a quorum votes unanimously to commit a value, no other value can ever be voted prepared unanimously by a quorum.
-        conjecture [crux1] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V)) & B2 > B & V2 ~= V -> forall N . intact(N) & member(N,Q) -> ~(voted_prepared(N,B2,V2) | accepted_prepared(N,B2,V2) | confirmed_prepared(N,B2,V2))
-        # a node does not prepare a value that contradicts a previous vote unless the vote was overruled (this is needed to make the previous inductive):
+        conjecture [crux1] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V)) & B2 > B & V2 ~= V -> forall N . intact(N) & member(N,Q) -> ~voted_prepared(N,B2,V2)
+        # a node does not prepare a value that contradicts a previous vote to commit unless that vote cannot reach quorum threshold (this is needed to make the previous relative inductive):
         conjecture [crux2] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & intact(N1) & V1 ~= V2 & voted_prepared(N1,B1,V1) & B2 < B1 -> (~voted_committed(N1,B2,V2) | (exists N . intact(N) & member(N,Q) & left_ballot(N,B2) & ~voted_committed(N,B2,V2))) # NOTE: this conjecture is only needed for receive_accept_prepare and may be commented out for faster verification of the other actions.
         
         # vote means started:
