@@ -328,7 +328,7 @@ object protocol = {
         object spec = {
             temporal property (
                 # b0 lasts forever (see the discussion of this assumption):
-                (forall N . globally ~left_ballot(N,b0)) &
+                (forall N . globally ~left_ballot(N,b0)) & # TODO: only intact?
                 # intact nodes eventually receive each other's messages
                 (forall N1,N2,V . intact(N1) & intact(N2) -> globally (voted_prepared(N1,b0,V) -> eventually received_vote_prepare(N2,N1,b0,V))) &
                 (forall N1,N2,V . intact(N1) & intact(N2) -> globally (accepted_prepared(N1,b0,V) -> eventually received_accept_prepare(N2,N1,b0,V))) &
@@ -337,7 +337,7 @@ object protocol = {
                 # all intact nodes vote to prepare (b0,v0):
                 (forall N . intact(N) -> eventually voted_prepared(N,b0,v0)) &
                 # "prepare (b0,v0)" is never contradicted
-                (forall N . intact(N) & B < b0 & V ~= v0 -> globally ~accepted_committed(N,B,V)) & # TODO: this assumption is unecessary because it follows from the previous
+                (forall N . intact(N) & B < b0 & V ~= v0 -> globally ~accepted_committed(N,B,V)) & # TODO: remove; instead rely on the safety property proved in isolate safety_2 of SCP-safety.ivy
                 # prophecy witnesses:
                 ((exists N . intact(N) & globally ~received_accept_commit(n0,N,b0,v0)) -> (intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0))) &
                 ((exists N . intact(N) & globally ~received_vote_commit(n1,N,b0,v0)) -> (intact(n2) & globally ~received_vote_commit(n1,n2,b0,v0))) &
