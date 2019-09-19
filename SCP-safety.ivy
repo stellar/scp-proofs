@@ -81,7 +81,7 @@ object protocol = {
             # here we add all intact nodes to the inital footpring; there are finitely many intact nodes, thus this is okay.
             l2s_d(N:node) := well_behaved(N); 
         }
-
+        
         action nomination_update(n:node, v:value) = {
 
             nomination_output(n,V) := V = v; 
@@ -151,13 +151,13 @@ object protocol = {
                 confirmed_prepared(na,b,v) := true; # we must confirm prepared even if we left the ballot because that's used to pick the value to prepare in higher ballots.
                 if ~left_ballot(na,b) {
                     voted_committed(na,b,v) := true;
-                    # NOTE we do not vote if we left ballot b already. This is important because if anything has already been prepared at a higher ballot, then we risk a contradiction; this would violate the invariant stating that votes to commit are not contradicted unless they have been overruled.
+                    # NOTE we do not vote if we left ballot b already. This is important because if anything has already been voted prepared at a higher ballot, then we risk a contradiction; this would violate the invariant stating that votes to commit are not contradicted unless they have been overruled.
                 };
             };
             if ((exists Q . is_quorum(Q) & member(na,Q) & (forall N . member(N,Q) -> (received_vote_prepare(na,N,b,v) | received_accept_prepare(na,N,b,v)))) |
-                   (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_prepare(na,N,b,v)))) # &
-                # (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) & # not accepted anything contradictory
-                # (forall V . ~accepted_prepared(na,b,V)) # do not accept twice
+                   (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_prepare(na,N,b,v)))) &
+                   (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) & # not accepted anything contradictory
+                   (forall V . ~accepted_prepared(na,b,V)) # do not accept twice
             {
                 accepted_prepared(na,b,v) := true;
             };
@@ -265,27 +265,17 @@ object protocol = {
 
     isolate safety_2 = {
 
-        # TODO: this shows that a value unanimously voted prepared cannot be contradicted regardless of any liveness assumption. Use this in the liveness proof to simply it.
+        # Here we prove more safety properties which we later use in the liveness proof.
 
-        # tests
-        
-        conjecture (forall N . intact(N) -> voted_prepared(N,B,V)) & intact(N2) & accepted_committed(N2,B2,V2) & B2 < B -> V = V2 #BUG: renaming N2 to N confuses Ivy here
+        # A value unanimously voted prepared cannot be contradicted regardless of any liveness assumption. We use this to prove that, in a long-enough ballot in which all intact nodes prepare the same value, all intact nodes confirm that value as committed.        
+        conjecture (forall N . intact(N) -> voted_prepared(N,B,V)) & intact(N2) & accepted_committed(N2,B2,V2) & B2 < B -> V = V2 # Ivy BUG: renaming N2 to N confuses Ivy here.
 
-        conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & accepted_prepared(N2,B0,V1) -> V0 = V1
-        conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & B < B0 & accepted_committed(N2,B,V1) -> V0 = V1
+        # An accepted prepared value cannot be contradicted. We use this to prove that once an intact nodes confirms (b,v) as prepared, the cascade effect occurs (because (b,v) is never contradicted) and eventually all intact nodes confirm.
+        conjecture intact(N1) & accepted_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
+        # direct consequence:
+        conjecture intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
         
-        conjecture intact(N2) & (forall B,V . B < B0 & accepted_committed(N2,B,V) -> V = V0) & blocks_slices(S,N2) & (forall N3. member(N3,S) -> received_accept_prepare(N2,N3,B0,V0)) -> accepted_prepared(N2,B0,V0)
-        conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & blocks_slices(S,N2) & (forall N3. member(N3,S) -> received_accept_prepare(N2,N3,B0,V0)) -> accepted_prepared(N2,B0,V0)
-
-        # end tests
-        
-        # We now prove more safety properties that we later use in the liveness proof. The most important property is that if an intact node confirms (b,v) prepared, then no intact node ever accepts a contradictory statement.
-        
-        # a confirmed prepared value cannot be contradicted.
-        conjecture [main] intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
-        conjecture [main2] intact(N1) & accepted_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2
-        
-        # the two conjectures below are the crux of why the main conjecture above holds.
+        # the two conjectures below are the crux of why the main conjectures above hold.
         
         # once a quorum votes unanimously to commit a value, no other value can ever be voted prepared unanimously by a quorum.
         conjecture [crux1] is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V)) & B2 > B & V2 ~= V -> forall N . intact(N) & member(N,Q) -> ~voted_prepared(N,B2,V2)
@@ -324,16 +314,26 @@ object protocol = {
         conjecture ~(well_behaved(N) & left_ballot(N,B) & B2 < B & ~left_ballot(N,B2))
         conjecture ~(well_behaved(N) & started(N,B) & B0 < B & ~left_ballot(N,B0))
         
+        # # tests
+
+        # conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & accepted_prepared(N2,B0,V1) -> V0 = V1
+        # conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & B < B0 & accepted_committed(N2,B,V1) -> V0 = V1
+        
+        # conjecture intact(N2) & (forall B,V . B < B0 & accepted_committed(N2,B,V) -> V = V0) & blocks_slices(S,N2) & (forall N3. member(N3,S) -> received_accept_prepare(N2,N3,B0,V0)) -> accepted_prepared(N2,B0,V0)
+        # conjecture intact(N1) & intact(N2) & confirmed_prepared(N1,B0,V0) & blocks_slices(S,N2) & (forall N3. member(N3,S) -> received_accept_prepare(N2,N3,B0,V0)) -> accepted_prepared(N2,B0,V0)
+        
+        # # end tests
+        
     } with actions, ordering_assms, qi_intact
 
-    # A second isolate with independent properties. Speeds up verifiation.
+    # Another isolate with independent properties. Speeds up verification.
     isolate safety_3 = {
 
         conjecture [c1] intact(N1) & (forall N2. intact(N2) -> received_accept_prepare(N1,N2,B,V)) -> confirmed_prepared(N1,B,V)
         # a non-contradicted value unanimously accepted by a blocking set gets accepted.
-        conjecture [c2] intact(N1) & blocks_slices(S,N1) & (forall N2. member(N2,S) -> received_accept_prepare(N1,N2,B3,V2)) & (forall B,V . B <= B3  & accepted_committed(N1,B,V) -> V = V2)  -> accepted_prepared(N1,B3,V2)
+        conjecture [c2] intact(N1) & blocks_slices(S,N1) & (forall N2. member(N2,S) -> received_accept_prepare(N1,N2,B3,V2)) & (forall B,V . B <= B3  & accepted_committed(N1,B,V) -> V = V2) -> accepted_prepared(N1,B3,V2)
         
-        # To prove c1 this we must show that N1 has not yet accepted anything else.
+        # To prove c1 we must show that N1 has not yet accepted anything else:
         conjecture intact(N) & intact(N1) & accepted_prepared(N,B,V) & accepted_prepared(N1,B,V1) -> V1 = V
         conjecture intact(N) & intact(N1) & received_accept_prepare(N,N1,B,V) -> accepted_prepared(N1,B,V)
         conjecture well_behaved(N) & received_vote_prepare(N,N2,B,V) & well_behaved(N2) -> voted_prepared(N2,B,V)
@@ -341,14 +341,5 @@ object protocol = {
         conjecture intact(N) & voted_prepared(N,B,V1) & voted_prepared(N,B,V2) -> V1 = V2
         conjecture well_behaved(N) & voted_prepared(N,B,V) -> started(N,B) # to show that intact nodes don't vote twice
         
-    } with actions, ordering_assms, qi_intact
-
-    # A third isolate with independent properties. Speeds up verifiation.
-    isolate safety_4 = {
-        conjecture intact(N1) & confirmed_prepared(N1,B,V)
-            -> exists Q . is_quorum(Q) & member(N1,Q) & (forall N2 . well_behaved(N2) & member(N2,Q) -> accepted_prepared(N2,B,V))
-        conjecture well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
-
-    } with actions
-            
+    } with actions, qi_intact
 }
