@@ -1,6 +1,6 @@
 #lang ivy1.6
 
-# Here we prove that if all intact nodes prepare the same value v0 in a sufficiently long ballot b0, and if "prepare (b0,v0)" is never contradicted, then all intact nodes confirm (b0,v0) as committed.
+# Here we prove that if all intact nodes prepare the same value v0 in a sufficiently long ballot b0, then all intact nodes confirm (b0,v0) as committed.
 # Formally, we assume that b0 never ends. However, since eventualities happen at some point, this show that, for each execution, there is a sufficient ballot length. Since the ballot length increases unboundedly, we are guaranteed to attain a sufficient ballot length.
 
 include order
@@ -94,6 +94,8 @@ object protocol = {
             # a confirmed prepared ballot cannot be contradicted:
             assume intact(N1) & confirmed_prepared(N1,B1,V1) & intact(N2) & B2 <= B1 & accepted_committed(N2,B2,V2) -> V1 = V2;
 
+            assume (forall N . intact(N) -> voted_prepared(N,B,V)) & intact(N2) & accepted_committed(N2,B2,V2) & B2 < B -> V = V2;
+            
             # a well-behaved node does not accept something as committed unless it confirmed it prepared:
             assume intact(N) & voted_committed(N,B,V) -> confirmed_prepared(N,B,V);
             assume intact(N) & accepted_committed(N,B,V) -> confirmed_prepared(N,B,V);
@@ -336,8 +338,6 @@ object protocol = {
                 (forall N1,N2,V . intact(N1) & intact(N2) -> globally (accepted_committed(N1,b0,V) -> eventually received_accept_commit(N2,N1,b0,V))) &
                 # all intact nodes vote to prepare (b0,v0):
                 (forall N . intact(N) -> eventually voted_prepared(N,b0,v0)) &
-                # "prepare (b0,v0)" is never contradicted
-                (forall N . intact(N) & B < b0 & V ~= v0 -> globally ~accepted_committed(N,B,V)) & # TODO: remove; instead rely on the safety property proved in isolate safety_2 of SCP-safety.ivy
                 # prophecy witnesses:
                 ((exists N . intact(N) & globally ~received_accept_commit(n0,N,b0,v0)) -> (intact(n1) & globally ~received_accept_commit(n0,n1,b0,v0))) &
                 ((exists N . intact(N) & globally ~received_vote_commit(n1,N,b0,v0)) -> (intact(n2) & globally ~received_vote_commit(n1,n2,b0,v0))) &
@@ -411,8 +411,8 @@ object protocol = {
             #conjecture intact(n2) & intact(n3) & accepted_prepared(n3,b0,v0) -> (($l2s_w N1,N2,V. received_accept_prepare(N1,N2,b0,V))(n2,n3,v0) | received_accept_prepare(n2,n3,b0,v0))
             conjecture intact(n2) & intact(n3) & (globally ~received_accept_prepare(n2,n3,b0,v0)) -> (($l2s_w N1,N2,V. received_accept_prepare(N1,N2,b0,V))(n2,n3,v0) | ~accepted_prepared(n3,b0,v0))
 
-            # (L12) by assumption, "prepare (b0,v0)" is never contradicted:
-            conjecture intact(N) & B < b0 & V ~= v0 -> globally ~accepted_committed(N,B,V)
+            # (L12) by the savety property TODO, "prepare (b0,v0)" is never contradicted:
+            conjecture  (exists N . intact(N) & ($l2s_w N . voted_prepared(N,b0,v0))(N)) |  (forall N . intact(N) & B < b0 & V ~= v0 -> ~accepted_committed(N,B,V))
 
             # (L13) because intact nodes only vote to commit v0 in b0, intact nodes do not accept as prepared (b0,V) where V ~= v0
             conjecture intact(n3) & V ~= v0 & accepted_prepared(n3,b0,V) -> (exists N . intact(N) & ($l2s_w N . voted_prepared(N,b0,v0))(N))
