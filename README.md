@@ -1,3 +1,7 @@
+This is a repository containing formal proofs about the Stellar Consensus
+Protocol as described in the paper "Fast and secure global payments with
+Stellar" (SOSP 2019).
+
 # Ivy proofs
 
 This repository contains proofs of SCP's safety property (isolate
@@ -205,110 +209,72 @@ the safety property holds.
 
 ## Liveness 
 
-TODO: it may be better to start by explaining how SCP decides if all agree on the highest... and there is enough communication.
-Then explain the conditions for agreeing on the highest...
+The liveness properties of SCP follow from a key safety property: (P1) if there
+is a quorum-of-intact `Q` whose intact members all vote to commit `(b,v)`, then
+no value different from `v` is accepted as prepared in later ballots. We prove
+Property P1 in the isolate `safety_2` of `SCP-safety.ivy`. Relying on Property
+P1, we prove the two of liveness properties that we now discuss.
 
-In what follow we consider an intact set `I`. 
+In what follows, we always assume as a baseline that communication between
+intact nodes is reliable (i.e. messages are never lost) but can take an
+arbitrary amount of time.
 
-Informally, SCP relies on two key ingredients to achieve liveness: 
-  (a) The ballot-synchronization protocol aims at simulating a synchronous
-      system, i.e. a system in which intact nodes proceed from ballot to ballot
-      in lock-steps and have the same view of the protocol state by the end of
-      each ballot.
-  (b) Given two consecutive synchronous ballots, the balloting protocol
-      guarantees that all intact nodes reach a decision by the end of the
-      second synchronous ballot if all intact nodes agree on their nomination
-      output.
+The first property we prove is that, if there is ever a ballot `b1` such that
+(a) all intact nodes vote to prepare the same value `v` in `b1` and (b) `b1` lasts long
+enough, then all intact nodes confirm `v` as committed in `b1` (regardless of
+what faulty nodes do). This is not as trivial as it may seem because a node
+only accepts a statement if it has not accepted anything contradictory. Thus,
+contradictory accepted statements could prevent `v` from being confirmed
+committed in `b1`. To rule out this possibility, we first prove that if all
+intact nodes vote to prepare the same value `v` in `b1`, then no intact node
+accepts `commit (b,v)` where `v≠v1` `b≤b1`. In other words, `v1` is never
+contradicted in ballots preceding `b1`. This holds because, if `(b,v)`, with
+`b≤v1` and `v≠v1` is accepted as committed, then there is a quorum-of-intact
+`Q` whose intact members all voted to commit `(b,v)` before leaving ballot `b`.
+Therefore, by Property P1, no other value can be confirmed as prepared in
+ballots higher than `b`, and one intact node must have confirmed `(b,v)` as
+prepared before entering `b1`. Thus, at least one intact node has `(b,v)` as
+highest confirmed prepared value when entering `b1`, and this node must
+therefore vote to prepare `v` in `b1`. This contradicts the assumption that all
+intact nodes vote to prepare `v1` where `v1≠v`. Now that we have established
+that `prepare (b1,v1)` cannot be contradicted, it should be clear that given
+enough time for all messages sent from intact nodes to intact nodes to be
+delivered, `(b1,v1)` is eventually confirmed as committed (note that there is
+no need for the cascade theorem for this, because the set of intact nodes is
+a quorum for all intact nodes).
 
-This follows the traditional approach pioneered by Dwork, Lynch, and Stockmeyer
-in their seminal paper "Consensus in the Presence of Partial Synchrony" (the
-DLS paper). 
+It remains to show if and under what circumstances we can guarantee that there
+will come a ballot `b1` such that all intact nodes vote to prepare the same
+value in `b1`. We show that if there is a ballot `b0` such that `b0` can be
+split into two periods `Δ₁` and `Δ₂` where (a) all intact nodes have started
+`b0` by the end of `D1`, (b) intact nodes do not receive any new messages from
+non-intact members of their quorums during `D2`, and (c) `D2` is long enough,
+then, eventually, all intact nodes reach the same stable view of what values
+are confirmed prepared in `b0` or before. Therefore, if ballot `b1` is the
+successor of `b0` and all intact nodes agree on their nomination output, then
+all intact nodes vote to prepared the same value in `b1`. The key for this
+proof is again Property P1, whose contrapositive is that if `prepare (b0,v)` is
+confirmed, then no value `v'≠v` can be accepted as committed in ballots lower
+than `b0`. Therefore, once an intact nodes accepts a value `v` as prepared in
+`b0`, `prepare (b0,v)` cannot be contradicted and, by the cascade theorem, all
+intact nodes eventually accept it as prepared and then commit it prepared.
 
-Analysing the ballot-synchronization protocol to prove that, under some
-eventual synchrony conditions, it satisfies (a) requires reasoning about
-real-time properties involving message-propagation delay, clock skew, and timer
-durations. As pointed out before, our SCP model does not allow reasoning about
-such properties. Instead, we assume that there eventually comes a ballot `b0`
-such that:
-  (1) `b0` and `b0+1` are synchronous, meaning that any message sent by an
-      intact node in ballot `b∈{b0,b0+1}` is received by all its recipients by
-      the end of ballot `b`.
-  (2) all nodes have the same nomination output in ballot `b0+1`. 
+Unfortunately, it is not possible to guarantee that a ballot can be split into
+two periods as above in the presence of faulty nodes: a faulty node can always
+withhold an "accept prepare" message right until the end of a ballot and
+complete a quorum just before the ballot ends, and thereby cause some intact
+nodes to confirm the corresponding value as prepared while others do not.
+A detailed scenario where this causes a livelock is presented in the next
+section. Thus, to ensure that all intact nodes vote to prepare the same value
+in the next ballot, intact nodes must adjust their slices to make sure that no
+faulty or otherwise untimely node remain in any of their quorums.
 
-From those assumptions, we we discuss after the discussion of the proof, we
-prove that all intact nodes confirm a value as committed in ballot `b0+1`. 
+Finally, the properties proved above assume that ballot `b0` and its successor
+`b1` last long enough for all intact nodes to be there at the same time and for
+long enough. Assuming eventual synchrony, this is ensured by the
+ballot-synchronization protocol. However, we do not formally prove this
+property. This property of the ballot-synchronization protocol depends on
+real-time properties of the system such has message-delay, timer values, etc.
+which are not part of the Ivy SCP model.
 
-## The liveness argument
-
-The main difficulty of this proof is that, since nodes never accept
-contradictory statements, SCP could possibly reach a state in which no value
-can be accepted as prepared by any quorum because, for every quorum `Q`, `Q`
-contains nodes that accepted `v` as committed and other nodes that accepted
-`v'≠v` as committed.
-
-A key invariant of SCP prevents this situation from occurring: once a value
-is voted committed unanimously by the intact members of a quorum intersecting
-`I`, no other value can ever be accepted as prepared by intact nodes. We prove
-the key invariant of this paragraph in isolate `safety_2` in the file
-`SCP-safety.ivy`.
-
-Given this invariant, it is easy to see that a value must be confirmed as
-committed in `b0+1`: Since `b0` is synchronous, by the cascade theorem, all
-intact nodes agree on the highest confirmed prepared value they see. If (a)
-there is such a value `v`, then by the key invariant it cannot be contradicted
-in ballot `b0` and below, and thus, since `b0+1` is synchronous, `v` is
-confirmed committed in `b0+1`. If (b) no value is confirmed prepared by intact
-nodes by the end of ballot `b0`, then any value `w` will remain un-contradicted
-for the duration of `b0+1`; otherwise, this would mean that a value is accepted
-as committed in a ballot `b≤b0`, in which case it must be confirmed prepared in
-ballot `b≤b0`, which contradicts (b). In particular, the nomination output `vn`
-of the nodes, on which they all agree, is not contradicted during `b0+1` and
-thus, because `b0+1` is synchronous, `vn` is confirmed committed by the end of
-`b0+1`.
-
-By the key invariant, if `v` is the first value to be accepted as committed by
-an intact node (say in ballot `bv`), then no other values `v'≠v` can ever be
-accepted as committed in the future by an intact node (because that would
-require accepting it as prepared first, which violates the invariant). By the
-same key invariant, this value `v` will also be the highest confirmed prepared
-value among intact nodes from ballot `bv` onwards. Thus, if a value is accepted
-as committed by an intact node by the start of ballot `b0`, then that value is
-confirmed committed by the end of `b0+1`.
-
-## Discussion of the assumptions
-
-### The synchrony assumption
-
-Assumption (1) holds in an eventually synchronous system without faulty nodes.
-However, as we now discuss, faulty nodes can cause intact nodes to violate
-assumption (1) even if communication is timely and reliable between intact
-nodes. Suppose that a value `v` is missing only faulty node's votes to reach
-quorum threshold in some ballot. Then faulty nodes can send votes for `v` that
-complete a quorum to a single intact node right before intact node's timers for
-the round (in the ballot-synchronization protocol) are about to expire. The
-target intact node is then likely to send an accept message right before the
-intact's node timers expire, and its message likely does not reach all intact
-nodes before they leave the ballot.
-
-This can create a live-lock in which intact nodes never decide because they
-always disagree on the highest confirmed prepared value. For example, consider
-a system of 4 nodes `n1`, `n2`, `n3`, and `n4` where `n4` is the unique faulty
-node.
-
-To prevent this scenario, it must be the case that any node appearing in
-a quorum of an intact node is non-faulty and timely, i.e quorums of intact
-nodes must not contain any faulty node and, if they contain non-intact
-well-behaved nodes, those must be timely. In practice, nodes must therefore
-closely monitor the timing of nodes in their quorums and modify their slices to
-eventually arrive at a configuration such that quorums of intact nodes contain
-only timely well-behaved nodes.
-
-### The nomination assumption
-
-Assumption (2) states that all intact nodes agree on their nomination output in `b0+1`.
-
-The justification for this assumption is that nomination uses probabilistic
-leader-election which, with non-zero probability, elects a unique intact
-leader. Therefore an intact leader is eventually unanimously elected by all
-intact nodes, which leads to agreement on the nomination output.
-
+TODO: discuss the nomination assumption.
