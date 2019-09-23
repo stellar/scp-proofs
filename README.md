@@ -6,27 +6,25 @@ Stellar" (SOSP 2019).
 
 This repository contains proofs of SCP's safety property (isolate
 protocol.safety in SCP-safety.ivy) and of SCP's liveness properties. The
-liveness proof consists of the auxiliary safety invariants proved in
-SCP-safety.ivy (isolates `protocol.safety_2` and `protocol.safety_3`), and
-lemmas proved in `SCP-liveness-1.ivy`, `SCP-liveness-prepare-1.ivy`,
-, `SCP-liveness-prepare-2.ivy`, and
-`SCP-liveness-3.ivy`.
+liveness proof consists of the supporting safety invariants proved in
+`SCP-safety.ivy` (isolates `protocol.safety_2` and `protocol.safety_3`) and
+`SCP-safety-2.ivy`, and lemmas proved in `SCP-liveness-cascade.ivy`,
+`SCP-liveness-prepare.ivy`, and `SCP-liveness-3.ivy`.
 
-* In `SCP-liveness-1.ivy` we prove that if a ballot is long enough and all
-  nodes in the quorums of intact nodes are timely, then all intact nodes agree
-  on what is confirmed prepared by the end of the ballot.
-* In `SCP-liveness-prepare-1.ivy` and `SCP-liveness-prepare-2.ivy`, we prove
+* In `SCP-liveness-cascade.ivy` we prove that, in an arbitrary given ballot, if
+  all intact nodes vote to prepare the same value `v` and the ballot lasts long
+  enough, then all intact nodes confirm `v` as committed.
+* In `SCP-liveness-prepare.ivy`, we prove
   that if all intact nodes agree on what is confirmed prepared before a ballot
-  b, then they all propose the same value and this value cannot be contradicted
-  in previous ballots. We prove this in two small steps.
+  `b`, and their nomination output is the same, then they all vote to propose
+  the same value in `b`.
 * In `SCP-liveness-3.ivy` we prove that if intact nodes all prepare the same
-  value in a long-enough ballot, and if this value is not contradicted in
-  previous ballots, then all intact nodes confirm the value as committed by the
-  end of the ballot.
+  value in a long-enough ballot, then all intact nodes confirm the value as
+  committed by the end of the ballot.
 
-Together, those three lemmas show that SCP is guaranteed to produce a decision
-if given two long-enough consecutive ballots in which all quorums of intact
-nodes are timely.
+As we discuss below, together, those three lemmas show that SCP is guaranteed
+to produce a decision if given two long-enough consecutive ballots in which all
+quorums of intact nodes are timely.
 
 # Isabelle/HOL proofs
 
@@ -208,73 +206,106 @@ Ivy reaches the same conclusion automatically and successfully validates that
 the safety property holds.
 
 ## Liveness 
-
-The liveness properties of SCP follow from a key safety property: (P1) if there
-is a quorum-of-intact `Q` whose intact members all vote to commit `(b,v)`, then
-no value different from `v` is accepted as prepared in later ballots. We prove
-Property P1 in the isolate `safety_2` of `SCP-safety.ivy`. Relying on Property
-P1, we prove the two of liveness properties that we now discuss.
+ 
+The liveness properties of SCP follow from the cascade theorem and from a key
+safety property: (P1) if there is a quorum-of-intact `Q` whose intact members
+all vote to commit `(b,v)`, then no value different from `v` is accepted as
+prepared in later ballots. Property P1 rules out scenarios where nodes would
+not be able to accept any new statements because past accepted contradictory
+statements prevent them from accepting any new statement. We prove Property P1
+in the isolate `safety_2` of `SCP-safety.ivy`. Relying on Property P1, we
+formally prove two liveness properties that we now discuss.
 
 In what follows, we always assume as a baseline that communication between
 intact nodes is reliable (i.e. messages are never lost) but can take an
 arbitrary amount of time.
 
-The first property we prove is that, if there is ever a ballot `b1` such that
+Ballot-based protocols like SCP are usually live assuming a variant of eventual
+synchrony. That, we assume that, eventually, the system stabilizes in some way.
+For example, we might assume that the communication delay between intact nodes
+eventually becomes bounded by a constant. Given such an assumption, one way to
+prove the liveness of ballot-based protocols like SCP is to first prove that,
+eventually, the ballot-synchronization mechanism simulates a synchronous system
+in which intact nodes go from ballot to ballot in lock-steps and all receive
+the same messages in a given ballot. Then, assuming that ballots eventually
+become synchronous, we prove that the protocol terminates. This is roughly the
+approach pioneered by Dwork, Lynch, and Stockemeyer in their seminal work
+"Consensus in the presence of partial synchronony", and we also take this
+approach.
+
+We formally prove two liveness properties L1 and L2 that depend on assumptions
+about the ballot-synchronization protocol; then, we informally argue that,
+assuming that the ballot-synchronization protocol eventually ensures synchrony,
+L1 and L2 guarantee that after two synchronous ballots all intact nodes have
+confirmed a value committed. We do not formally analyse the
+ballot-synchronization protocol. Doing so would require reasoning about
+real-time properties involving message-propagation delay, timeout values, etc.
+which is not possible with the first-order model of SCP that we use here. See
+the SOSP paper for an informal discussion of the ballot-synchronization
+protocol.
+
+The first property we prove is that, (L1) if there is ever a ballot `b1` such that
 (a) all intact nodes vote to prepare the same value `v` in `b1` and (b) `b1` lasts long
 enough, then all intact nodes confirm `v` as committed in `b1` (regardless of
 what faulty nodes do). This is not as trivial as it may seem because a node
-only accepts a statement if it has not accepted anything contradictory. Thus,
-contradictory accepted statements could prevent `v` from being confirmed
-committed in `b1`. To rule out this possibility, we first prove that if all
-intact nodes vote to prepare the same value `v` in `b1`, then no intact node
-accepts `commit (b,v)` where `v≠v1` `b≤b1`. In other words, `v1` is never
-contradicted in ballots preceding `b1`. This holds because, if `(b,v)`, with
-`b≤v1` and `v≠v1` is accepted as committed, then there is a quorum-of-intact
-`Q` whose intact members all voted to commit `(b,v)` before leaving ballot `b`.
-Therefore, by Property P1, no other value can be confirmed as prepared in
-ballots higher than `b`, and one intact node must have confirmed `(b,v)` as
-prepared before entering `b1`. Thus, at least one intact node has `(b,v)` as
-highest confirmed prepared value when entering `b1`, and this node must
-therefore vote to prepare `v` in `b1`. This contradicts the assumption that all
-intact nodes vote to prepare `v1` where `v1≠v`. Now that we have established
-that `prepare (b1,v1)` cannot be contradicted, it should be clear that given
-enough time for all messages sent from intact nodes to intact nodes to be
-delivered, `(b1,v1)` is eventually confirmed as committed (note that there is
-no need for the cascade theorem for this, because the set of intact nodes is
-a quorum for all intact nodes).
+accepts a new statement only if it has not already accepted anything
+contradictory. Thus, contradictory accepted statements could prevent `v` from
+being confirmed committed in `b1`. To rule out this possibility, we first prove
+that if all intact nodes vote to prepare the same value `v` in `b1`, then no
+intact node has or ever accepts `commit (b,v)` where `v≠v1` and `b≤b1`. In
+other words, `v1` is never contradicted in ballots preceding `b1`. This holds
+because, if `(b,v)`, with `b≤v1` and `v≠v1` is accepted as committed, then
+there is a quorum-of-intact `Q` whose intact members all voted to commit
+`(b,v)` before leaving ballot `b`. Therefore, by Property P1, no other value
+can be confirmed as prepared in ballots higher than `b`, and thus one intact node
+must have confirmed `(b,v)` as prepared before entering `b1`. Therefore, at least
+one intact node has `(b,v)` as highest confirmed prepared value when entering
+`b1`, and this node must therefore vote to prepare `v` in `b1`. This
+contradicts the assumption that all intact nodes vote to prepare `v1` where
+`v1≠v`. Now that we have established that `prepare (b1,v1)` cannot be
+contradicted, it should be clear that given enough time for all messages sent
+from intact nodes to intact nodes to be delivered, `(b1,v1)` is eventually
+confirmed as committed (note that there is no need for the cascade theorem for
+this, because the set of intact nodes is a quorum for all intact nodes).
 
 It remains to show if and under what circumstances we can guarantee that there
 will come a ballot `b1` such that all intact nodes vote to prepare the same
-value in `b1`. We show that if there is a ballot `b0` such that `b0` can be
-split into two periods `Δ₁` and `Δ₂` where (a) all intact nodes have started
-`b0` by the end of `D1`, (b) intact nodes do not receive any new messages from
-non-intact members of their quorums during `D2`, and (c) `D2` is long enough,
-then, eventually, all intact nodes reach the same stable view of what values
-are confirmed prepared in `b0` or before. Therefore, if ballot `b1` is the
-successor of `b0` and all intact nodes agree on their nomination output, then
-all intact nodes vote to prepared the same value in `b1`. The key for this
-proof is again Property P1, whose contrapositive is that if `prepare (b0,v)` is
-confirmed, then no value `v'≠v` can be accepted as committed in ballots lower
-than `b0`. Therefore, once an intact nodes accepts a value `v` as prepared in
-`b0`, `prepare (b0,v)` cannot be contradicted and, by the cascade theorem, all
-intact nodes eventually accept it as prepared and then commit it prepared.
+value in `b1`. Using the cascade theorem and Property P1, we show that (L2)
+once an intact node accepts a value `v` as prepared in `b0`, then all intact
+nodes eventually accept it as prepared and then commit it prepared. The key for
+this proof is showing that the cascading effect is not blocked by contradictory
+accepted statements, again using Property P1. The contrapositive of Property P1
+is that if `prepare (b0,v)` is confirmed, then no value `v'≠v` can be accepted
+as committed in ballots lower than `b0`. Therefore, once an intact nodes
+accepts a value `v` as prepared in `b0`, `prepare (b0,v)` cannot be
+contradicted and, by the cascade theorem, all intact nodes eventually accept it
+as prepared and then commit it prepared.
+We formally prove Property L2 in `SCP-liveness-cascade.ivy`.
 
-Unfortunately, it is not possible to guarantee that a ballot can be split into
-two periods as above in the presence of faulty nodes: a faulty node can always
-withhold an "accept prepare" message right until the end of a ballot and
-complete a quorum just before the ballot ends, and thereby cause some intact
-nodes to confirm the corresponding value as prepared while others do not.
-A detailed scenario where this causes a livelock is presented in the next
-section. Thus, to ensure that all intact nodes vote to prepare the same value
-in the next ballot, intact nodes must adjust their slices to make sure that no
-faulty or otherwise untimely node remain in any of their quorums.
+Liveness Property L2 shows that, if, eventually, no new values are ever
+confirmed prepared by any intact nodes, then, eventually, all intact nodes
+agree on what is confirmed prepared. Thus, barring interference from non-intact
+nodes, if ballots become synchronous and keep increasing in duration, there
+will come a ballot that is long enough enough for all intact nodes to agree on
+what is confirmed prepared by the end of the ballot. It easily follows,
+assuming that nomination has converged, that all intact nodes vote to prepare
+the same value in the next ballot (this is proved formally in
+`SCP-liveness-prepare-1.ivy` and `SCP-liveness-prepare-2.ivy`), and that, by
+Liveness Property L1, all intact nodes confirm a value committed in the next
+ballot.
 
-Finally, the properties proved above assume that ballot `b0` and its successor
-`b1` last long enough for all intact nodes to be there at the same time and for
-long enough. Assuming eventual synchrony, this is ensured by the
-ballot-synchronization protocol. However, we do not formally prove this
-property. This property of the ballot-synchronization protocol depends on
-real-time properties of the system such has message-delay, timer values, etc.
-which are not part of the Ivy SCP model.
+Unfortunately, non-intact nodes can always interfere right before the end of
+a ballot and cause disagreement on what is confirmed prepared among intact
+nodes: a non-intact node can always withhold an "accept prepare" message right
+until the end of a ballot (either because it is faulty or because it has bad
+timing) and complete a quorum just before the ballot ends, and thereby cause
+some intact nodes to confirm the corresponding value as prepared while others
+do not. A detailed scenario where this causes a livelock is presented in the
+next section. Thus, to ensure that all intact nodes vote to prepare the same
+value in the next ballot, intact nodes must adjust their slices to make sure
+that no faulty or otherwise untimely node remain in any of their quorums.
 
-TODO: discuss the nomination assumption.
+## A livelock scenario
+
+Here we present a scenario in which an untimely node which is never removed
+from intact nodes' slices can cause a livelock. TODO

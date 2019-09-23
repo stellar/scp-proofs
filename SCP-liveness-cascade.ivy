@@ -2,7 +2,7 @@
 
 # Here we prove that if an intact node confirmes (b,v) as prepared, then all intact nodes eventually confirm (b,v) as prepared.
 # This is not as trivial as it may seem because a node accepts something only if it has not accepted anything contradictory. Thus, in the presence of contradictory accepts, the cascading effect may not occur.
-# The proof relies on a lemma proved in SCP-safety-2.ivy: if an intact node confirms (b,v) as prepared and another intact node has not yet done so, then there must be an accept message in flight
+# The proof relies on a lemma proved in SCP-safety-2.ivy: if an intact node confirms (b,v) as prepared and another intact node has not yet done so, then there must be an accept message in flight.
 # In turn, this lemma relies on the cascade theorem and the fact that an accepted or confirmed prepared value cannot be contradicted (which is proved in isolate safety_2 of SCP-safety.ivy).
 
 include order

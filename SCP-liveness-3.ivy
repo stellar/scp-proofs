@@ -45,10 +45,6 @@ axiom (exists N . intact(N) & blocks_slices(S,N)) -> exists N2 . member(N2,S) & 
 # QA edges none
 axiom exists Q . (forall N . member(N,Q) <-> intact(N)) & is_quorum(Q)
 
-# NOTE: the cascade theorem is a higher-order property that we cannot express in first-order logic. Instead, we instantiate it only when needed using assume statements in the transition system. This happens in SCP-liveness-1.ivy:
-# assume is_quorum(q0) & (exists N0 . intact(N0) & member(N0,q0)) & (forall N . intact(N) & member(N,q0) -> accepted_prepared(N,b1,v)) -> ((forall N1 . intact(N1) -> accepted_prepared(N1,b1,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b1,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b1,v)))));
-# In English: if a set of nodes including a quorum of an intact node accepts (b,v), then either all intact accept (b,v) or there is an intact node blocked by a set of intact node that all accept (b,v).
-
 object protocol = {
     
     relation voted_prepared(N:node, B:ballot, V:value)
@@ -330,7 +326,7 @@ object protocol = {
         object spec = {
             temporal property (
                 # b0 lasts forever (see the discussion of this assumption):
-                (forall N . globally ~left_ballot(N,b0)) & # TODO: only intact?
+                (forall N . intact(N) -> globally ~left_ballot(N,b0)) &
                 # intact nodes eventually receive each other's messages
                 (forall N1,N2,V . intact(N1) & intact(N2) -> globally (voted_prepared(N1,b0,V) -> eventually received_vote_prepare(N2,N1,b0,V))) &
                 (forall N1,N2,V . intact(N1) & intact(N2) -> globally (accepted_prepared(N1,b0,V) -> eventually received_accept_prepare(N2,N1,b0,V))) &
@@ -411,7 +407,7 @@ object protocol = {
             #conjecture intact(n2) & intact(n3) & accepted_prepared(n3,b0,v0) -> (($l2s_w N1,N2,V. received_accept_prepare(N1,N2,b0,V))(n2,n3,v0) | received_accept_prepare(n2,n3,b0,v0))
             conjecture intact(n2) & intact(n3) & (globally ~received_accept_prepare(n2,n3,b0,v0)) -> (($l2s_w N1,N2,V. received_accept_prepare(N1,N2,b0,V))(n2,n3,v0) | ~accepted_prepared(n3,b0,v0))
 
-            # (L12) by the savety property TODO, "prepare (b0,v0)" is never contradicted:
+            # (L12) by the safety properties assumed, "prepare (b0,v0)" is never contradicted:
             conjecture  (exists N . intact(N) & ($l2s_w N . voted_prepared(N,b0,v0))(N)) |  (forall N . intact(N) & B < b0 & V ~= v0 -> ~accepted_committed(N,B,V))
 
             # (L13) because intact nodes only vote to commit v0 in b0, intact nodes do not accept as prepared (b0,V) where V ~= v0
