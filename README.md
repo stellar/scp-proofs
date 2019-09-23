@@ -267,6 +267,7 @@ contradicted, it should be clear that given enough time for all messages sent
 from intact nodes to intact nodes to be delivered, `(b1,v1)` is eventually
 confirmed as committed (note that there is no need for the cascade theorem for
 this, because the set of intact nodes is a quorum for all intact nodes).
+We formally prove Property L1 in `SCP-liveness-3.ivy`.
 
 It remains to show if and under what circumstances we can guarantee that there
 will come a ballot `b1` such that all intact nodes vote to prepare the same
@@ -290,9 +291,8 @@ will come a ballot that is long enough enough for all intact nodes to agree on
 what is confirmed prepared by the end of the ballot. It easily follows,
 assuming that nomination has converged, that all intact nodes vote to prepare
 the same value in the next ballot (this is proved formally in
-`SCP-liveness-prepare-1.ivy` and `SCP-liveness-prepare-2.ivy`), and that, by
-Liveness Property L1, all intact nodes confirm a value committed in the next
-ballot.
+`SCP-liveness-prepare.ivy`), and that, by Liveness Property L1, all intact
+nodes confirm a value committed in the next ballot.
 
 Unfortunately, non-intact nodes can always interfere right before the end of
 a ballot and cause disagreement on what is confirmed prepared among intact
