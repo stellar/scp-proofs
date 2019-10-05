@@ -25,15 +25,16 @@ section \<open>Intact and the Cascade Theorem\<close>
 locale intact = \<comment> \<open>Here we fix an intact set @{term I} and prove the cascade theorem.\<close>
   orig:FBAS slices W 
   + proj:FBAS "project slices I" W \<comment> \<open>We consider the projection of the system on @{term I}.\<close>
-  for slices W I +
-  assumes intact_wb:"I \<subseteq> W" \<comment> \<open>An intact set is a set @{term I} satisfying those three assumptions.\<close>
+  for slices W I +  \<comment> \<open>An intact set is a set @{term I} satisfying the three assumptions below:\<close>
+  assumes intact_wb:"I \<subseteq> W"
     and q_avail:"orig.quorum I" \<comment> \<open>@{term I} is a quorum in the original system.\<close>
     and q_inter:"\<And> Q Q' . \<lbrakk>proj.quorum Q; proj.quorum Q'; Q \<inter> I \<noteq> {}; Q' \<inter> I \<noteq> {}\<rbrakk>  \<Longrightarrow> Q \<inter> Q' \<inter> I \<noteq> {}" 
     \<comment> \<open>Any two sets that intersect @{term I} and that are quorums in the projected system intersect in @{term I}.
 Note that requiring that @{text \<open>Q \<inter> Q' \<noteq> {}\<close>} instead of @{text \<open>Q \<inter> Q' \<inter> I \<noteq> {}\<close>} would be equivalent.\<close>
 begin
 
-theorem blocking_safe: \<comment> \<open>A set that blocks an intact node contains an intact node. If this were not the case, quorum availability would trivially be violated.\<close>
+theorem blocking_safe: \<comment> \<open>A set that blocks an intact node contains an intact node. 
+If this were not the case, quorum availability would trivially be violated.\<close>
   fixes S n
   assumes "n\<in>I" and "\<forall> Sl\<in> slices n .Sl\<inter>S \<noteq> {}"
   shows "S \<inter> I \<noteq> {}"
@@ -109,7 +110,6 @@ This is the only interesting part of the proof.\<close>
       and "Q\<^sub>1 \<inter> I\<^sub>1 \<noteq> {}" and "Q\<^sub>2 \<inter> I\<^sub>2 \<noteq> {}"
     for Q\<^sub>1 Q\<^sub>2
   proof -
-    obtain n where "n \<in> I\<^sub>1\<inter>I\<^sub>2" using inter by blast
     have "i1.proj.quorum I\<^sub>2" 
     proof -
       have "i1.orig.quorum I\<^sub>2" by (simp add: i2.q_avail)
@@ -117,7 +117,8 @@ This is the only interesting part of the proof.\<close>
         by auto (meson Int_commute Int_iff inf_le2 subset_trans)
     qed
     moreover note \<open>i1.proj.quorum Q\<^sub>1\<close>
-    ultimately have "Q\<^sub>1 \<inter> I\<^sub>2 \<inter> I\<^sub>1 \<noteq> {}" using i1.q_inter inter \<open>Q\<^sub>1 \<inter> I\<^sub>1 \<noteq> {}\<close> by blast
+    ultimately have "Q\<^sub>1 \<inter> I\<^sub>2 \<noteq> {}" using i1.q_inter inter \<open>Q\<^sub>1 \<inter> I\<^sub>1 \<noteq> {}\<close> by blast
+
     moreover note \<open>i2.proj.quorum Q\<^sub>2\<close>  
     moreover note \<open>i2.proj.quorum Q\<^sub>1\<close>
     ultimately have "Q\<^sub>1 \<inter> Q\<^sub>2 \<inter> I\<^sub>2 \<noteq> {}" using i2.q_inter \<open>Q\<^sub>2 \<inter> I\<^sub>2 \<noteq> {}\<close> by blast 
