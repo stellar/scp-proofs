@@ -33,15 +33,63 @@ safety and liveness properties of SCP apply. Informally, a set *I* is intact
 when (a) *I* is a quorum, and (b) even if all nodes outside *I* are faulty, any
 two quorums of members of *I* intersect.
 
-Given this definition, we prove that:
-* The cascade theorem holds.
-* The union of two intersecting intact sets is intact; this means that maximal
-  intact sets are disjoint, and that an FBA system is a collection of disjoint
-  maximal intact sets.
+We prove that:
+1. The cascade theorem holds: if `I` is an intact set, `Q` is a quorum of
+   a member of `I`, and `Q⊆S`, then either `I⊆S` or there is a member of `I−S`
+   that is blocked by `S∩I`.
+2. The union of two intersecting intact sets is intact.
+
+Two major difference with the Stellar Whitepaper are that:
+1. we do not assume that the FBAS enjoys quorum intersection. Thus there may be
+   disjoint intact sets that diverge but nevertheless remain internally safe
+   and live. Point 2 above implies that maximal intact sets are disjoint, and
+   that an FBA system is a collection of disjoint maximal intact sets.
+2. We use a new, more abstract definition of quorum for the analysis. A quorum
+   is a set `Q` such that all well-behaved members of `Q` have a slice in `Q`.
+
+Note that the new definition of quorum only relies on the slices of
+well-behaved nodes, which seems natural since faulty nodes can arbitrarily
+change their slices, whereas the original definition of quorum used the slices
+of faulty nodes too.
+
+We use this new definition of quorum only for the analysis of the system. In
+reality, nodes do not know who is faulty and thus cannot use this new
+definition of quorum, and instead just check for sets whose members all have
+a slice inside the set. The abstraction we make here is safe because any set
+that is deemed a quorum by a node in reality is also a quorum in the abstract
+definition that we use for our analysis. Moreover, the two definitions coincide
+exactly when we consider only well-behaved nodes.
 
 To browse and check FBA.thy with Isabelle, use [Isabelle
 2019](https://isabelle.in.tum.de/). The file `output/document.pdf` is a PDF
 version of FBA.thy.
+
+## Comment on the proofs
+
+The proofs do not follow the presentation of the Stellar Whitepaper. They are
+simpler due to the reformulation of the notion of quorum. 
+
+To prove the cascade theorem, we assume by contradiction that `I` is not
+a subset of `S` but no member of `S−I` is blocked by `S∩I`. In this situation,
+we note that `I−S` is a quorum of a member of `I` in the projection of the
+system on `I`. Moreover, `Q` is also a quorum of a member of `I` in the
+projection of the system on `I`. Thus, by the quorum intersection property of
+`I`, `Q` and `I−S` must intersect. This is clearly impossible since `Q` is
+a subset of `S`, and we have reached a contradiction.
+
+To prove that the union of two intersecting intact set is intact, we reason as
+follows. Take two intersecting intact sets `I₁` and `I₂`. First, note that
+`I₁∪I₂` is trivially a quorum, and thus we have quorum availability. 
+
+It remains to show that `I₁∪I₂` enjoys quorum intersection. Take a set `Q₁`
+that is a quorum of a member of `I₁` in the system projected on `I₁∪I₂` and
+a quorum `Q₂` that is a quorum of a member of `I₂` in the system projected on
+`I₁∪I₂`. We must show that `Q₁` and `Q₂` intersect in `I₁∪I₂`. First note that
+`I₂` is a quorum in the system projected on `I₁` and, by assumption,
+`I₁∩I₂≠{}`. Thus, since `Q₁` is a quorum in the system projected on `I₁` and
+`I₁` is intact, (a) `I₂` and `Q₁` intersect. Moreover, both `Q₁` and `Q₂` are
+quorums in the system projected on `I₂`. Hence, because `I₂` is intact,
+(b) `Q₁` and `Q₂` intersect in `I₂`, and we are done. 
 
 # Installing and using Ivy
 
