@@ -2,30 +2,6 @@ This is a repository containing formal proofs about the Stellar Consensus
 Protocol as described in the paper "Fast and secure global payments with
 Stellar" (SOSP 2019).
 
-# Ivy proofs
-
-This repository contains proofs of SCP's safety property (isolate
-protocol.safety in SCP-safety.ivy) and of SCP's liveness properties. The
-liveness proof consists of the supporting safety invariants proved in
-`SCP-safety.ivy` (isolates `protocol.safety_2` and `protocol.safety_3`) and
-`SCP-safety-2.ivy`, and lemmas proved in `SCP-liveness-cascade.ivy`,
-`SCP-liveness-prepare.ivy`, and `SCP-liveness-3.ivy`.
-
-* In `SCP-liveness-cascade.ivy` we prove that, in an arbitrary given ballot, if
-  all intact nodes vote to prepare the same value `v` and the ballot lasts long
-  enough, then all intact nodes confirm `v` as committed.
-* In `SCP-liveness-prepare.ivy`, we prove
-  that if all intact nodes agree on what is confirmed prepared before a ballot
-  `b`, and their nomination output is the same, then they all vote to propose
-  the same value in `b`.
-* In `SCP-liveness-3.ivy` we prove that if intact nodes all prepare the same
-  value in a long-enough ballot, then all intact nodes confirm the value as
-  committed by the end of the ballot.
-
-As we discuss below, together, those three lemmas show that SCP is guaranteed
-to produce a decision if given two long-enough consecutive ballots in which all
-quorums of intact nodes are timely.
-
 # Isabelle/HOL proofs
 
 FBA.thy contains a formalization of the notion of intact set, to which the
@@ -86,10 +62,36 @@ that is a quorum of a member of `I₁` in the system projected on `I₁∪I₂` 
 a quorum `Q₂` that is a quorum of a member of `I₂` in the system projected on
 `I₁∪I₂`. We must show that `Q₁` and `Q₂` intersect in `I₁∪I₂`. First note that
 `I₂` is a quorum in the system projected on `I₁` and, by assumption,
-`I₁∩I₂≠{}`. Thus, since `Q₁` is a quorum in the system projected on `I₁` and
-`I₁` is intact, (a) `I₂` and `Q₁` intersect. Moreover, both `Q₁` and `Q₂` are
-quorums in the system projected on `I₂`. Hence, because `I₂` is intact,
-(b) `Q₁` and `Q₂` intersect in `I₂`, and we are done. 
+`I₁∩I₂≠{}`. Moreover, `Q₁` is a quorum in the system projected on `I₁` and `I₁`
+is intact. Thus, by the quorum intersection property of intact sets, (a) `I₂`
+and `Q₁` intersect. Moreover, (b) both `Q₁` and `Q₂` are quorums in the system
+projected on `I₂`. Because `I₂` is intact, by the quorum intersection property,
+we get from (a) and (b) that `Q₁` and `Q₂` intersect in `I₂`, and we are done. 
+
+
+# Ivy proofs
+
+This repository contains proofs of SCP's safety property (isolate
+protocol.safety in SCP-safety.ivy) and of SCP's liveness properties. The
+liveness proof consists of the supporting safety invariants proved in
+`SCP-safety.ivy` (isolates `protocol.safety_2` and `protocol.safety_3`) and
+`SCP-safety-2.ivy`, and lemmas proved in `SCP-liveness-cascade.ivy`,
+`SCP-liveness-prepare.ivy`, and `SCP-liveness-3.ivy`.
+
+* In `SCP-liveness-cascade.ivy` we prove that, in an arbitrary given ballot, if
+  all intact nodes vote to prepare the same value `v` and the ballot lasts long
+  enough, then all intact nodes confirm `v` as committed.
+* In `SCP-liveness-prepare.ivy`, we prove
+  that if all intact nodes agree on what is confirmed prepared before a ballot
+  `b`, and their nomination output is the same, then they all vote to propose
+  the same value in `b`.
+* In `SCP-liveness-3.ivy` we prove that if intact nodes all prepare the same
+  value in a long-enough ballot, then all intact nodes confirm the value as
+  committed by the end of the ballot.
+
+As we discuss below, together, those three lemmas show that SCP is guaranteed
+to produce a decision if given two long-enough consecutive ballots in which all
+quorums of intact nodes are timely.
 
 # Installing and using Ivy
 
