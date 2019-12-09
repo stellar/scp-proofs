@@ -2,21 +2,29 @@ This is a repository containing formal proofs about the Stellar Consensus
 Protocol as described in the paper "Fast and secure global payments with
 Stellar" (SOSP 2019).
 
+With Isabelle/HOL, we formalize Federated Byzantine Agreement Systems (FBAS) and
+we prove the cascade theorem and that the union of two intact sets is intact.
+
+With Ivy, we formalize SCP in a high-level, non-executable specification, and
+we prove that intact sets never disagree (SCP's main safety property) and that,
+under some assumptions, every member of an intact set eventually commits
+a value (SCP's main liveness property).
+
 # Isabelle/HOL proofs
 
-FBA.thy contains a formalization of the notion of intact set, to which the
-safety and liveness properties of SCP apply. Informally, a set *I* is intact
-when (a) *I* is a quorum, and (b) even if all nodes outside *I* are faulty, any
-two quorums of members of *I* intersect.
+FBA.thy contains a formalization of the notion of intact set. Informally, a set
+*I* is intact when (a) *I* is a quorum, and (b) even if all nodes outside *I*
+are faulty, any two quorums of members of *I* intersect.
 
 We prove that:
 1. The cascade theorem holds: if `I` is an intact set, `Q` is a quorum of
    a member of `I`, and `Q⊆S`, then either `I⊆S` or there is a member of `I−S`
    that is blocked by `S∩I`.
-2. The union of two intersecting intact sets is intact.
+2. The union of two intersecting intact sets is intact. This implies that
+   maximal intact sets are disjoint.
 
 Two major difference with the Stellar Whitepaper are that:
-1. we do not assume that the FBAS enjoys quorum intersection. Thus there may be
+1. We do not assume that the FBAS enjoys quorum intersection. Thus there may be
    disjoint intact sets that diverge but nevertheless remain internally safe
    and live. Point 2 above implies that maximal intact sets are disjoint, and
    that an FBA system is a collection of disjoint maximal intact sets.
@@ -40,7 +48,7 @@ To browse and check FBA.thy with Isabelle, use [Isabelle
 2019](https://isabelle.in.tum.de/). The file `output/document.pdf` is a PDF
 version of FBA.thy.
 
-## Comment on the proofs
+## Comments on the Isabelle/HOL proofs
 
 The proofs do not follow the presentation of the Stellar Whitepaper. They are
 simpler due to the reformulation of the notion of quorum. 
@@ -68,10 +76,9 @@ and `Q₁` intersect. Moreover, (b) both `Q₁` and `Q₂` are quorums in the sy
 projected on `I₂`. Because `I₂` is intact, by the quorum intersection property,
 we get from (a) and (b) that `Q₁` and `Q₂` intersect in `I₂`, and we are done. 
 
-
 # Ivy proofs
 
-This repository contains proofs of SCP's safety property (isolate
+This repository contains Ivy proofs of SCP's safety property (isolate
 protocol.safety in SCP-safety.ivy) and of SCP's liveness properties. The
 liveness proof consists of the supporting safety invariants proved in
 `SCP-safety.ivy` (isolates `protocol.safety_2` and `protocol.safety_3`) and
