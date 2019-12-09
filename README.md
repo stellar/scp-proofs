@@ -357,12 +357,6 @@ nodes: a non-intact node can always withhold an "accept prepare" message right
 until the end of a ballot (either because it is faulty or because it has bad
 timing) and complete a quorum just before the ballot ends, and thereby cause
 some intact nodes to confirm the corresponding value as prepared while others
-do not. A detailed scenario where this causes a livelock is presented in the
-next section. Thus, to ensure that all intact nodes vote to prepare the same
+do not. Thus, to ensure that all intact nodes vote to prepare the same
 value in the next ballot, intact nodes must adjust their slices to make sure
 that no faulty or otherwise untimely node remain in any of their quorums.
-
-## A livelock scenario
-
-Here we present a scenario in which an untimely node which is never removed
-from intact nodes' slices can cause a livelock. TODO
