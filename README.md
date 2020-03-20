@@ -242,16 +242,6 @@ The key invariants are:
 4. A well-behaved node does not accept different values as prepared in the same
    ballot.
 
-Ivy automatically checks that those invariants, along with the auxiliary
-conjectures present in the `safety` isolate in `SCP-safety.ivy`, are inductive.
-
-Given those invariants, we can reason as follows: suppose two differ values `v`
-and `v'` are confirmed committed by two intertwined nodes. By Invariant 3,
-Invariant 4, and Quorum Intersection, we get that intertwined nodes cannot
-confirm two different values as prepared in the same ballot, and thus by
-Invariant 1 no two different values are confirmed as committed in the same
-ballot.
-
 Now suppose that `v` and `v'` are confirmed committed in ballots `n` and `n'`,
 with `n < n'`. By Invariant 1 and Invariant 3, there is a quorum `Q` of an
 intertwined node whose well-behaved members all accepted `(n',v')` as prepared.
@@ -259,6 +249,8 @@ Thus, by Invariant 2, no well-behaved member of `Q` ever accepts `(n,v)` as
 committed. Thus, by Invariant 3 and Quorum Intersection, no intertwined node
 confirmed `(n,v)` as committed, which is a contradiction.
 
+
+Using the auxiliary conjectures present in the `safety` isolate in `SCP-safety.ivy`, 
 Ivy reaches the same conclusion automatically and successfully validates that
 the safety property holds.
 
