@@ -225,7 +225,7 @@ proved from simpler assumptions, thereby increasing our confidence in the
 protocol, if we could reason about real-time properties.
 
 
-## Safety
+## Agreement
 
 We prove that intertwined nodes never disagree by providing a collection of
 conjectures which, together with the safety property to prove, form an
@@ -249,21 +249,37 @@ Thus, by Invariant 2, no well-behaved member of `Q` ever accepts `(n,v)` as
 committed. Thus, by Invariant 3 and Quorum Intersection, no intertwined node
 confirmed `(n,v)` as committed, which is a contradiction.
 
-
 Using the auxiliary conjectures present in the `safety` isolate in `SCP-safety.ivy`, 
 Ivy reaches the same conclusion automatically and successfully validates that
 the safety property holds.
 
+Note that the agreement property relies only on properties of accepted and
+confirmed statements (i.e. nodes could vote arbitrarily and safety would not be
+violated).
+
 ## Liveness 
+
+In addition to the cascade theorem, two ingredients allow intact nodes in SCP
+to eventually confirm a value as committed: First, SCP never enters a deadlock
+in which contradictory statements prevent anything from being accepted as
+prepared. This is ensured by the property P1 described below.  Second, the
+timeout mechanism ensures that, if the system becomes synchronous, intact nodes
+are able to synchronize their ballot numbers and spend enough time together in
+the each ballot to allow the protocol to converge. 
  
-The liveness properties of SCP follow from the cascade theorem and from a key
-safety property: (P1) if there is a quorum-of-intact `Q` whose intact members
-all vote to commit `(b,v)`, then no value different from `v` is accepted as
-prepared in later ballots. Property P1 rules out scenarios where nodes would
-not be able to accept any new statements because past accepted contradictory
-statements prevent them from accepting any new statement. We prove Property P1
-in the isolate `safety_2` of `SCP-safety.ivy`. Relying on Property P1, we
-formally prove two liveness properties that we now discuss.
+The safety property P1 states that: if there is a quorum-of-intact `Q` whose
+intact members all vote to commit `(b,v)`, then no value different from `v` is
+accepted as prepared in later ballots. This means that at most a single value
+`v` can be ever be accepted as committed by intact nodes.
+
+Property P1 rules out scenarios where
+nodes would not be able to accept any new statements because past accepted
+contradictory statements prevent them from accepting any new statement. 
+
+We prove Property P1 in the isolate `safety_2` of `SCP-safety.ivy`. Relying on
+Property P1, we formally prove two liveness properties that we now discuss.
+
+Note that property P1 is not needed to prove agreement.
 
 In what follows, we always assume as a baseline that communication between
 intact nodes is reliable (i.e. messages are never lost) but can take an
