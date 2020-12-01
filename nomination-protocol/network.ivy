@@ -21,13 +21,9 @@ module network(id_t, val_t) = {
         # who does the calculation, so it seems okay to put this here.
         instance nset : set(id_t)
         relation is_quorum(S:nset)
-
-        # Two quorums must intersect.
-        axiom forall S1, S2. (is_quorum(S1) & is_quorum(S2))
-                -> (exists V. nset.member(V, S1) & nset.member(V, S2))
-
-        # A quorum must not be empty
-        axiom forall S . is_quorum(S) -> (exists V. nset.member(V, S))
+        relation intersect(S:nset, T:nset)
+        axiom [intersection_basic_prop] nset.member(V, S1) & nset.member(V, S2) -> intersect(S1, S2)
+        axiom [quorum_intersection] is_quorum(S1) & is_quorum(S2) -> intersect(S1, S2)
 
         # The set of all nodes is a quorum
         # because every quorum slice is contained in the set of all nodes.
@@ -37,7 +33,7 @@ module network(id_t, val_t) = {
 
         definition is_blocking(V, B) =
             forall QUORUM . is_quorum(QUORUM) & nset.member(V, QUORUM)
-                                -> exists W . nset.member(W, B) & nset.member(W, QUORUM)
+                                -> intersect(B, QUORUM)
     }
 
     object spec = {
@@ -111,10 +107,25 @@ module network(id_t, val_t) = {
         invariant nodes(ID).spec.have_confirmed(VALUE) ->
                     exists OTHER. nodes(OTHER).spec.have_voted(VALUE)
         invariant have_delivered_accept(SRC, DST, VALUE)
-                    -> have_broadcast_accept(SRC, VALUE)
+                    -> have_broadcast_accept(SRC, VALUE) & nodes(DST).spec.heard_accept(SRC, VALUE)
         invariant (A ~= B & nodes(A).spec.heard_vote(B, VALUE))
                     -> nodes(B).spec.have_voted(VALUE) &
                         have_broadcast_vote(B, VALUE)
+
+        # If NODE has confirmed VALUE,
+        # It must be the case that NODE has accepted VALUE
+        # * NODE has accepted VALUE, and
+        # * There exists a quorum such that
+        #     * NODE is in the quorum, and
+        #     * NODE has heard from every other node in the quorum that they accepted VALUE.
+        # This is just the definition of confirming from the white paper.
+        invariant nodes(NODE).spec.have_confirmed(VALUE)
+                    -> nodes(NODE).spec.have_accepted(VALUE) &
+                       exists QUORUM.
+                            intf.is_quorum(QUORUM) &
+                            intf.nset.member(NODE, QUORUM) &
+                            (forall OTHER. intf.nset.member(OTHER, QUORUM)
+                                -> (NODE = OTHER | nodes(NODE).spec.heard_accept(OTHER, VALUE)))
 
 # IVy can't seem to prove this.
 # The setup is wrong and/or I haven't added enough invariants.
