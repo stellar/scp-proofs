@@ -33,6 +33,13 @@ isolate network = {
        (forall OTHER. nset.member(OTHER, QUORUM)
          -> (NODE = OTHER | node(NODE).heard_accept(OTHER, VALUE)))
 
+    relation node_heard_quorum_vote_or_accept_value(NODE:id_t, QUORUM:nset, VALUE:val_t)
+    definition node_heard_quorum_vote_or_accept_value(NODE, QUORUM, VALUE) =
+       is_quorum(QUORUM) &
+       nset.member(NODE, QUORUM) &
+       (forall OTHER. nset.member(OTHER, QUORUM)
+         -> (NODE = OTHER | node(NODE).heard_vote(OTHER, VALUE) | node(NODE).heard_accept(OTHER, VALUE)))
+
     # This definition is different from the white paper's definition.
     # I think this might still work, but this is something I should revisit in the future.
     relation is_blocking(V:id_t, B:nset)
@@ -40,6 +47,11 @@ isolate network = {
     definition is_blocking(V, B) =
       forall QUORUM . is_quorum(QUORUM) & nset.member(V, QUORUM)
         -> intersect(B, QUORUM)
+
+    relation node_heard_v_blocking_accept(NODE:id_t, BLOCKING:nset, VALUE:val_t)
+    definition node_heard_v_blocking_accept(NODE, BLOCKING, VALUE) =
+       is_blocking(NODE, BLOCKING) &
+       (forall OTHER. nset.member(OTHER, BLOCKING) -> node(NODE).heard_accept(OTHER, VALUE))
 
     specification {
         relation have_broadcast_vote(SRC:id_t, VALUE:val_t)
@@ -159,6 +171,12 @@ isolate network = {
         invariant (A ~= B & node(A).heard_accept(B, VALUE))
                     -> node(B).have_accepted(VALUE) &
                         have_broadcast_accept(B, VALUE)
+
+        invariant [accept_forward] node(NODE).have_accepted(VALUE)
+                    -> (
+                        (exists QUORUM. node_heard_quorum_vote_or_accept_value(NODE, QUORUM, VALUE)) |
+                        (exists BLOCKING. node_heard_v_blocking_accept(NODE, BLOCKING, VALUE))
+                    )
 
         # If NODE has confirmed VALUE,
         # It must be the case that NODE has accepted VALUE
