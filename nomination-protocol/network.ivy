@@ -153,6 +153,9 @@ isolate network = {
         invariant (A ~= B & node(A).heard_vote(B, VALUE))
                     -> node(B).have_voted(VALUE) &
                         have_broadcast_vote(B, VALUE)
+        invariant (A ~= B & node(A).heard_accept(B, VALUE))
+                    -> node(B).have_accepted(VALUE) &
+                        have_broadcast_accept(B, VALUE)
 
         # If NODE has confirmed VALUE,
         # It must be the case that NODE has accepted VALUE
