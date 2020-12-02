@@ -24,6 +24,13 @@ isolate network = {
     # because every quorum slice is contained in the set of all nodes.
     axiom is_quorum(nset.universe)
 
+    relation node_heard_quorum_accept_value(NODE:id_t, QUORUM:nset, VALUE:val_t)
+    definition node_heard_quorum_accept_value(NODE, QUORUM, VALUE) =
+       is_quorum(QUORUM) &
+       nset.member(NODE, QUORUM) &
+       (forall OTHER. nset.member(OTHER, QUORUM)
+         -> (NODE = OTHER | node(NODE).heard_accept(OTHER, VALUE)))
+
     relation is_blocking(V:id_t, B:nset)
 
     definition is_blocking(V, B) =
@@ -91,10 +98,7 @@ isolate network = {
         invariant node(NODE).have_confirmed(VALUE)
                     -> node(NODE).have_accepted(VALUE) &
                        exists QUORUM.
-                            is_quorum(QUORUM) &
-                            nset.member(NODE, QUORUM) &
-                            (forall OTHER. nset.member(OTHER, QUORUM)
-                                -> (NODE = OTHER | node(NODE).heard_accept(OTHER, VALUE)))
+                       node_heard_quorum_accept_value(NODE, QUORUM, VALUE)
 
 # IVy can't seem to prove this.
 # The setup is wrong and/or I haven't added enough invariants.
