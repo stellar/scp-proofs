@@ -4,24 +4,22 @@
 # self_id is the id_t of each node instance
 # val_t is the type of values
 
-module node(id_t, self_id, val_t) = {
+isolate node(self_id:id_t) = {
 
     # Interface of a node -- only define ways node can be called here.
-    object intf = {
-        # Node can be called from application
-        # and asked to begin voting on something.
-        action vote_for(value:val_t)
+    # Node can be called from application
+    # and asked to begin voting on something.
+    action vote_for(value:val_t)
 
-        # Node can also be called from network
-        # and told that someone else voted or accepted.
-        action recv_vote(src:id_t, value:val_t)
-        action recv_accept(src:id_t, value:val_t)
-    }
+    # Node can also be called from network
+    # and told that someone else voted or accepted.
+    action recv_vote(src:id_t, value:val_t)
+    action recv_accept(src:id_t, value:val_t)
 
     # Logical specs for the interface -- use ghost variables here to track
     # logical changes to node's knowledge and state over time. These may
     # also be observed by other modules and other node instances.
-    object spec = {
+    specification {
         relation heard_vote(SRC:id_t, VALUE:val_t)
         relation heard_accept(SRC:id_t, VALUE:val_t)
 
@@ -39,88 +37,88 @@ module node(id_t, self_id, val_t) = {
             have_candidate_value := false;
         }
 
-        before intf.vote_for {
+        before vote_for {
             require ~have_voted(value);
             require ~have_candidate_value;
         }
 
-        after intf.vote_for {
+        after vote_for {
             have_voted(value) := true;
-            call net.intf.broadcast_vote(self_id, value);
+            call network.broadcast_vote(self_id, value);
         }
 
-        before intf.recv_vote {
-            require net.spec.have_delivered_vote(src, self_id, value)
+        before recv_vote {
+            require network.have_delivered_vote(src, self_id, value)
         }
 
-        after intf.recv_vote {
+        after recv_vote {
             heard_vote(src, value) := true;
 
             # Condition 1 for accepting
             if ((have_voted(value) | have_accepted(value)) &
                 (exists Q.
-                    (net.intf.is_quorum(Q) &
-                     net.intf.nset.member(self_id, Q) &
+                    (network.is_quorum(Q) &
+                     nset.member(self_id, Q) &
                      (forall OTHER.
-                        (net.intf.nset.member(OTHER, Q)
+                        (nset.member(OTHER, Q)
                          -> (heard_vote(OTHER, value) |
                              heard_accept(OTHER, value) |
                              OTHER = self_id)))))) {
                 have_accepted(value) := true;
-                call net.intf.broadcast_accept(self_id, value);
+                call network.broadcast_accept(self_id, value);
             };
 
             # Condition 2 for accepting
             if (exists B.
-                (net.intf.is_blocking(self_id, B) &
-                 (forall V. (net.intf.nset.member(V, B) -> heard_accept(V, value))))) {
+                (network.is_blocking(self_id, B) &
+                 (forall V. (nset.member(V, B) -> heard_accept(V, value))))) {
                 have_accepted(value) := true;
-                call net.intf.broadcast_accept(self_id, value);
+                call network.broadcast_accept(self_id, value);
             };
-            
+
             # Confirm
             if (have_accepted(value) &
                 (exists Q.
-                    (net.intf.is_quorum(Q) &
+                    (network.is_quorum(Q) &
                      forall OTHER.
-                        (net.intf.nset.member(OTHER, Q)
+                        (nset.member(OTHER, Q)
                             -> (self_id = OTHER | heard_accept(OTHER, value)))))) {
                 have_confirmed(value) := true;
                 have_candidate_value := true;
             };
         }
 
-        after intf.recv_accept {
+        after recv_accept {
             heard_accept(src, value) := true;
 
             # Condition 1 for accepting
             if ((have_voted(value) | have_accepted(value)) &
                 (exists Q.
-                    (net.intf.is_quorum(Q) &
-                     net.intf.nset.member(self_id, Q) &
+                    (network.is_quorum(Q) &
+                     nset.member(self_id, Q) &
                      (forall OTHER .
-                        (net.intf.nset.member(OTHER, Q)
+                        (nset.member(OTHER, Q)
                          -> (heard_vote(OTHER, value) |
                              heard_accept(OTHER, value) |
                              OTHER = self_id)))))) {
                 have_accepted(value) := true;
-                call net.intf.broadcast_accept(self_id, value);
+                call network.broadcast_accept(self_id, value);
             };
 
             # Condition 2 for accepting
             if (exists B.
-                (net.intf.is_blocking(self_id, B) &
-                 (forall V . (net.intf.nset.member(V, B) -> heard_accept(V, value))))) {
+                (network.is_blocking(self_id, B) &
+                 (forall V . (nset.member(V, B) -> heard_accept(V, value))))) {
                 have_accepted(value) := true;
-                call net.intf.broadcast_accept(self_id, value);
+                call network.broadcast_accept(self_id, value);
             };
-            
+
             # Confirm
             if (have_accepted(value) &
                 (exists Q.
-                    (net.intf.is_quorum(Q) &
+                    (network.is_quorum(Q) &
                      forall OTHER.
-                        (net.intf.nset.member(OTHER, Q)
+                        (nset.member(OTHER, Q)
                             -> (self_id = OTHER | heard_accept(OTHER, value)))))) {
                 have_confirmed(value) := true;
                 have_candidate_value := true;
@@ -131,12 +129,12 @@ module node(id_t, self_id, val_t) = {
     # Implementation of the interface matching the logical specs -- use concrete
     # variables here to implement the interface defined and spec'ed above. These
     # should not be observed outside the current node.
-    object impl = {
+    implementation {
 
         # Include any state variables that would actually show up in
         # an implementation but we don't want to include in the spec.
         # individual voted : bool
-        implement intf.vote_for {
+        implement vote_for {
         }
     }
-}
+} with network
