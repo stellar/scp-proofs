@@ -137,6 +137,9 @@ isolate network = {
         invariant have_delivered_vote(SRC, DST, VALUE) -> node(SRC).have_voted(VALUE)
         invariant have_delivered_vote(SRC, DST, VALUE) -> node(DST).heard_vote(SRC, VALUE)
         invariant have_delivered_vote(SRC, DST, VALUE) -> have_broadcast_vote(SRC, VALUE)
+        invariant have_delivered_accept(SRC, DST, VALUE) -> node(SRC).have_accepted(VALUE)
+        invariant have_delivered_accept(SRC, DST, VALUE) -> node(DST).heard_accept(SRC, VALUE)
+        invariant have_delivered_accept(SRC, DST, VALUE) -> have_broadcast_accept(SRC, VALUE)
         invariant have_broadcast_accept(NODE, VALUE) -> node(NODE).have_accepted(VALUE)
         invariant node(ID).have_accepted(VALUE) ->
                     exists OTHER. node(OTHER).have_voted(VALUE)
@@ -164,11 +167,12 @@ isolate network = {
         #     * NODE is in the quorum, and
         #     * NODE has heard from every other node in the quorum that they accepted VALUE.
         # This is just the definition of confirming from the white paper.
-        invariant node(NODE).have_confirmed(VALUE)
+        invariant [confirm_forward] node(NODE).have_confirmed(VALUE)
                     -> (node(NODE).have_accepted(VALUE) &
                        (exists QUORUM.  node_heard_quorum_accept_value(NODE, QUORUM, VALUE)))
-        invariant (node(NODE).have_accepted(VALUE) &
+        invariant [confirm_backward] (node(NODE).have_accepted(VALUE) &
                        (exists QUORUM.  node_heard_quorum_accept_value(NODE, QUORUM, VALUE)))
                     -> node(NODE).have_confirmed(VALUE)
+
     }
 } with node
