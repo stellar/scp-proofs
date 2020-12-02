@@ -117,6 +117,7 @@ isolate node(self_id:id_t) = {
             if (have_accepted(value) &
                 (exists Q.
                     (network.is_quorum(Q) &
+                     nset.member(self_id, Q) &
                      forall OTHER.
                         (nset.member(OTHER, Q)
                             -> (self_id = OTHER | heard_accept(OTHER, value)))))) {

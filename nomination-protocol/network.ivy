@@ -19,10 +19,12 @@ isolate network = {
     relation intersect(S:nset, T:nset)
     axiom [intersection_basic_prop] nset.member(V, S1) & nset.member(V, S2) -> intersect(S1, S2)
     axiom [quorum_intersection] is_quorum(S1) & is_quorum(S2) -> intersect(S1, S2)
+    individual universe : nset
+    axiom forall V. nset.member(V, universe)
 
     # The set of all nodes is a quorum
     # because every quorum slice is contained in the set of all nodes.
-    axiom is_quorum(nset.universe)
+    axiom is_quorum(universe)
 
     relation node_heard_quorum_accept_value(NODE:id_t, QUORUM:nset, VALUE:val_t)
     definition node_heard_quorum_accept_value(NODE, QUORUM, VALUE) =
@@ -90,18 +92,6 @@ isolate network = {
         ####### ***INVARIANT***
         #######
 
-        # If NODE has confirmed VALUE,
-        # It must be the case that NODE has accepted VALUE
-        # * NODE has accepted VALUE, and
-        # * There exists a quorum such that
-        #     * NODE is in the quorum, and
-        #     * NODE has heard from every other node in the quorum that they accepted VALUE.
-        # This is just the definition of confirming from the white paper.
-        invariant node(NODE).have_confirmed(VALUE)
-                    -> node(NODE).have_accepted(VALUE) &
-                       exists QUORUM.
-                       node_heard_quorum_accept_value(NODE, QUORUM, VALUE)
-
 # IVy can't seem to prove this.
 # The setup is wrong and/or I haven't added enough invariants.
 #        invariant [if_confirmed_everyone_will_confirm]
@@ -163,5 +153,19 @@ isolate network = {
         invariant (A ~= B & node(A).heard_vote(B, VALUE))
                     -> node(B).have_voted(VALUE) &
                         have_broadcast_vote(B, VALUE)
+
+        # If NODE has confirmed VALUE,
+        # It must be the case that NODE has accepted VALUE
+        # * NODE has accepted VALUE, and
+        # * There exists a quorum such that
+        #     * NODE is in the quorum, and
+        #     * NODE has heard from every other node in the quorum that they accepted VALUE.
+        # This is just the definition of confirming from the white paper.
+        invariant node(NODE).have_confirmed(VALUE)
+                    -> (node(NODE).have_accepted(VALUE) &
+                       (exists QUORUM.  node_heard_quorum_accept_value(NODE, QUORUM, VALUE)))
+        invariant (node(NODE).have_accepted(VALUE) &
+                       (exists QUORUM.  node_heard_quorum_accept_value(NODE, QUORUM, VALUE)))
+                    -> node(NODE).have_confirmed(VALUE)
     }
 } with node

@@ -4,7 +4,4 @@
 module set(t) = {
     type this
     relation member(E:t,S:this)
-
-    individual universe : this
-    axiom forall E. member(E,universe)
 }
