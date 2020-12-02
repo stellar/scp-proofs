@@ -1,28 +1,20 @@
 #lang ivy1.7
 
+include set
+
+type id_t
+type val_t
+instance nset : set(id_t)
+
 include node
 include network
 
-# The type of node identities (eg. public keys / IP addresses or such)
-type id_t
-
-# The type of values being voted-on.
-type val_t
-
-# We have one network module for specifying network-wide properties.
-instance net : network(id_t, val_t)
-
-# And we have a _set_ of node modules, one per element of the opaque id_t type,
-# for specifying properties local to a single node. Each node gets told its own
-# identity via the second parameter ID.
-instance nodes(ID:id_t) : node(id_t, ID, val_t)
-
 # Allow IVy to cause any number of vote_for actions to initiate activities on
 # individual nodes.
-export nodes(ID).intf.vote_for
+export node(ID).vote_for
 
 # Allow Ivy to initiate messages from the network side
-export net.intf.broadcast_vote
-export net.intf.deliver_vote
-export net.intf.broadcast_accept
-export net.intf.deliver_accept
+export network.broadcast_vote
+export network.deliver_vote
+export network.broadcast_accept
+export network.deliver_accept

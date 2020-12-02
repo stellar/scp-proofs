@@ -1,42 +1,43 @@
 #lang ivy1.7
 
-include set
+isolate network = {
 
-module network(id_t, val_t) = {
+    # Network can be called src a node sending a message.
+    action broadcast_vote(src:id_t, value:val_t)
+    action broadcast_accept(src:id_t, value:val_t)
 
+    # Network can also be "called" spontaneously to note the
+    # delivery of a message at a node.
+    action deliver_vote(src:id_t, dst:id_t, value:val_t)
+    action deliver_accept(src:id_t, dst:id_t, value:val_t)
 
-    object intf = {
-        # Network can be called src a node sending a message.
-        action broadcast_vote(src:id_t, value:val_t)
-        action broadcast_accept(src:id_t, value:val_t)
+    # Adding quorums in the network module lets us not worry about quorum slices.
+    # In the actual network, each node's quorum slices are public information
+    # and the calculation of quorums from quorum slices does not depend on
+    # who does the calculation, so it seems okay to put this here.
+    relation is_quorum(S:nset)
+    relation intersect(S:nset, T:nset)
+    axiom [intersection_basic_prop] nset.member(V, S1) & nset.member(V, S2) -> intersect(S1, S2)
+    axiom [quorum_intersection] is_quorum(S1) & is_quorum(S2) -> intersect(S1, S2)
 
-        # Network can also be "called" spontaneously to note the
-        # delivery of a message at a node.
-        action deliver_vote(src:id_t, dst:id_t, value:val_t)
-        action deliver_accept(src:id_t, dst:id_t, value:val_t)
+    # The set of all nodes is a quorum
+    # because every quorum slice is contained in the set of all nodes.
+    axiom is_quorum(nset.universe)
 
-        # Adding quorums in the network module lets us not worry about quorum slices.
-        # In the actual network, each node's quorum slices are public information
-        # and the calculation of quorums from quorum slices does not depend on
-        # who does the calculation, so it seems okay to put this here.
-        instance nset : set(id_t)
-        relation is_quorum(S:nset)
-        relation intersect(S:nset, T:nset)
-        axiom [intersection_basic_prop] nset.member(V, S1) & nset.member(V, S2) -> intersect(S1, S2)
-        axiom [quorum_intersection] is_quorum(S1) & is_quorum(S2) -> intersect(S1, S2)
+    relation node_heard_quorum_accept_value(NODE:id_t, QUORUM:nset, VALUE:val_t)
+    definition node_heard_quorum_accept_value(NODE, QUORUM, VALUE) =
+       is_quorum(QUORUM) &
+       nset.member(NODE, QUORUM) &
+       (forall OTHER. nset.member(OTHER, QUORUM)
+         -> (NODE = OTHER | node(NODE).heard_accept(OTHER, VALUE)))
 
-        # The set of all nodes is a quorum
-        # because every quorum slice is contained in the set of all nodes.
-        axiom is_quorum(nset.universe)
+    relation is_blocking(V:id_t, B:nset)
 
-        relation is_blocking(V:id_t, B:nset)
+    definition is_blocking(V, B) =
+      forall QUORUM . is_quorum(QUORUM) & nset.member(V, QUORUM)
+        -> intersect(B, QUORUM)
 
-        definition is_blocking(V, B) =
-            forall QUORUM . is_quorum(QUORUM) & nset.member(V, QUORUM)
-                                -> intersect(B, QUORUM)
-    }
-
-    object spec = {
+    specification {
         relation have_broadcast_vote(SRC:id_t, VALUE:val_t)
         relation have_broadcast_accept(SRC:id_t, VALUE:val_t)
         relation have_delivered_vote(SRC:id_t, DST:id_t, VALUE:val_t)
@@ -49,68 +50,43 @@ module network(id_t, val_t) = {
             have_delivered_accept(SRC, DST, VALUE) := false;
         }
 
-        before intf.broadcast_vote {
-            require nodes(src).spec.have_voted(value);
+        before broadcast_vote {
+            require node(src).have_voted(value);
         }
-        after intf.broadcast_vote {
+        after broadcast_vote {
             have_broadcast_vote(src, value) := true;
         }
 
-        before intf.deliver_vote {
+        before deliver_vote {
             require have_broadcast_vote(src, value);
             # Remove this next condition to allow message duplication.
             require ~have_delivered_vote(src, dst, value);
         }
-        after intf.deliver_vote {
-            call nodes(dst).intf.recv_vote(src, value);
-            spec.have_delivered_vote(src, dst, value) := true;
+        after deliver_vote {
+            call node(dst).recv_vote(src, value);
+            have_delivered_vote(src, dst, value) := true;
         }
 
-        before intf.broadcast_accept {
-            require nodes(src).spec.have_accepted(value);
+        before broadcast_accept {
+            require node(src).have_accepted(value);
         }
-        after intf.broadcast_accept {
+        after broadcast_accept {
             have_broadcast_accept(src, value) := true;
         }
 
-        before intf.deliver_accept {
+        before deliver_accept {
             require have_broadcast_accept(src, value);
             # Remove this next condition to allow message duplication.
             require ~have_delivered_accept(src, dst, value);
         }
-        after intf.deliver_accept {
-            call nodes(dst).intf.recv_accept(src, value);
-            spec.have_delivered_accept(src, dst, value) := true;
+        after deliver_accept {
+            call node(dst).recv_accept(src, value);
+            have_delivered_accept(src, dst, value) := true;
         }
 
         #######
         ####### ***INVARIANT***
         #######
-
-        # Seemingly trivial invariants.
-        # For some reason, IVy seems to like to come up with CTIs that violate these,
-        # so it's probably a good idea to keep these here.
-        invariant have_broadcast_vote(NODE, VALUE) -> nodes(NODE).spec.have_voted(VALUE)
-        invariant have_delivered_vote(SRC, DST, VALUE)
-                    <-> nodes(SRC).spec.have_voted(VALUE) &
-                       nodes(DST).spec.heard_vote(SRC, VALUE) &
-                       have_broadcast_vote(SRC, VALUE)
-        invariant have_broadcast_accept(NODE, VALUE) -> nodes(NODE).spec.have_accepted(VALUE)
-        invariant nodes(ID).spec.have_accepted(VALUE) ->
-                    exists OTHER. nodes(OTHER).spec.have_voted(VALUE)
-        invariant have_delivered_accept(SRC, DST, VALUE)
-                    -> exists OTHER. nodes(OTHER).spec.have_voted(VALUE)
-        invariant have_delivered_accept(SRC, DST, VALUE)
-                    -> nodes(SRC).spec.have_accepted(VALUE)
-        invariant (SRC ~= DST & have_delivered_accept(SRC, DST, VALUE))
-                    -> nodes(DST).spec.heard_accept(SRC, VALUE)
-        invariant nodes(ID).spec.have_confirmed(VALUE) ->
-                    exists OTHER. nodes(OTHER).spec.have_voted(VALUE)
-        invariant have_delivered_accept(SRC, DST, VALUE)
-                    -> have_broadcast_accept(SRC, VALUE) & nodes(DST).spec.heard_accept(SRC, VALUE)
-        invariant (A ~= B & nodes(A).spec.heard_vote(B, VALUE))
-                    -> nodes(B).spec.have_voted(VALUE) &
-                        have_broadcast_vote(B, VALUE)
 
         # If NODE has confirmed VALUE,
         # It must be the case that NODE has accepted VALUE
@@ -119,19 +95,16 @@ module network(id_t, val_t) = {
         #     * NODE is in the quorum, and
         #     * NODE has heard from every other node in the quorum that they accepted VALUE.
         # This is just the definition of confirming from the white paper.
-        invariant nodes(NODE).spec.have_confirmed(VALUE)
-                    -> nodes(NODE).spec.have_accepted(VALUE) &
+        invariant node(NODE).have_confirmed(VALUE)
+                    -> node(NODE).have_accepted(VALUE) &
                        exists QUORUM.
-                            intf.is_quorum(QUORUM) &
-                            intf.nset.member(NODE, QUORUM) &
-                            (forall OTHER. intf.nset.member(OTHER, QUORUM)
-                                -> (NODE = OTHER | nodes(NODE).spec.heard_accept(OTHER, VALUE)))
+                       node_heard_quorum_accept_value(NODE, QUORUM, VALUE)
 
 # IVy can't seem to prove this.
 # The setup is wrong and/or I haven't added enough invariants.
 #        invariant [if_confirmed_everyone_will_confirm]
-#            nodes(ID).spec.have_confirmed(VALUE)
-#                -> (forall OTHER_ID . nodes(OTHER_ID).spec.have_confirmed(VALUE)) |
+#            node(ID).have_confirmed(VALUE)
+#                -> (forall OTHER_ID . node(OTHER_ID).have_confirmed(VALUE)) |
 #                   (exists SRC, DST . have_broadcast_vote(SRC, VALUE) &
 #                                      ~have_delivered_vote(SRC, DST, VALUE)) |
 #                   (exists SRC, DST . have_broadcast_accept(SRC, VALUE) &
@@ -140,8 +113,8 @@ module network(id_t, val_t) = {
 # IVy can't seem to prove this.
 # The setup is wrong and/or I haven't added enough invariants.
 #        invariant [eventually_at_least_one_candidate_value]
-#            nodes(ID).spec.have_voted(VALUE)
-#                -> nodes(ID).spec.have_confirmed(VALUE) |
+#            node(ID).have_voted(VALUE)
+#                -> node(ID).have_confirmed(VALUE) |
 #                   (exists SRC, DST . have_broadcast_vote(SRC, VALUE) &
 #                                      ~have_delivered_vote(SRC, DST, VALUE)) |
 #                   (exists SRC, DST . have_broadcast_accept(SRC, VALUE) &
@@ -154,16 +127,40 @@ module network(id_t, val_t) = {
             (forall SRC, DST, VALUE.
                 (have_broadcast_vote(SRC, VALUE) -> have_delivered_vote(SRC, DST, VALUE)) &
                 (have_broadcast_accept(SRC, VALUE) -> have_delivered_accept(SRC, DST, VALUE)))
-            -> (forall NODE1, NODE2, VALUE. nodes(NODE1).spec.have_confirmed(VALUE) -> nodes(NODE2).spec.have_confirmed(VALUE))
+            -> (forall NODE1, NODE2, VALUE. node(NODE1).have_confirmed(VALUE) -> node(NODE2).have_confirmed(VALUE))
     }
 
-    object impl = {
-        relation something_private(X:id_t)
-        implement intf.broadcast_vote {
-            something_private(src) := true
+    implementation {
+        implement broadcast_vote {
         }
-        implement intf.deliver_vote {
-            something_private(src) := true
+        implement deliver_vote {
         }
     }
-}
+
+    private {
+        # Seemingly trivial invariants.
+        # For some reason, IVy seems to like to come up with CTIs that violate these,
+        # so it's probably a good idea to keep these here.
+        invariant have_broadcast_vote(NODE, VALUE) -> node(NODE).have_voted(VALUE)
+        invariant have_delivered_vote(SRC, DST, VALUE)
+                    <-> node(SRC).have_voted(VALUE) &
+                       node(DST).heard_vote(SRC, VALUE) &
+                       have_broadcast_vote(SRC, VALUE)
+        invariant have_broadcast_accept(NODE, VALUE) -> node(NODE).have_accepted(VALUE)
+        invariant node(ID).have_accepted(VALUE) ->
+                    exists OTHER. node(OTHER).have_voted(VALUE)
+        invariant have_delivered_accept(SRC, DST, VALUE)
+                    -> exists OTHER. node(OTHER).have_voted(VALUE)
+        invariant have_delivered_accept(SRC, DST, VALUE)
+                    -> node(SRC).have_accepted(VALUE)
+        invariant (SRC ~= DST & have_delivered_accept(SRC, DST, VALUE))
+                    -> node(DST).heard_accept(SRC, VALUE)
+        invariant node(ID).have_confirmed(VALUE) ->
+                    exists OTHER. node(OTHER).have_voted(VALUE)
+        invariant have_delivered_accept(SRC, DST, VALUE)
+                    -> have_broadcast_accept(SRC, VALUE) & node(DST).heard_accept(SRC, VALUE)
+        invariant (A ~= B & node(A).heard_vote(B, VALUE))
+                    -> node(B).have_voted(VALUE) &
+                        have_broadcast_vote(B, VALUE)
+    }
+} with node
