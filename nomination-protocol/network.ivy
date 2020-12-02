@@ -31,6 +31,8 @@ isolate network = {
        (forall OTHER. nset.member(OTHER, QUORUM)
          -> (NODE = OTHER | node(NODE).heard_accept(OTHER, VALUE)))
 
+    # This definition is different from the white paper's definition.
+    # I think this might still work, but this is something I should revisit in the future.
     relation is_blocking(V:id_t, B:nset)
 
     definition is_blocking(V, B) =
@@ -142,10 +144,9 @@ isolate network = {
         # For some reason, IVy seems to like to come up with CTIs that violate these,
         # so it's probably a good idea to keep these here.
         invariant have_broadcast_vote(NODE, VALUE) -> node(NODE).have_voted(VALUE)
-        invariant have_delivered_vote(SRC, DST, VALUE)
-                    <-> node(SRC).have_voted(VALUE) &
-                       node(DST).heard_vote(SRC, VALUE) &
-                       have_broadcast_vote(SRC, VALUE)
+        invariant have_delivered_vote(SRC, DST, VALUE) -> node(SRC).have_voted(VALUE)
+        invariant have_delivered_vote(SRC, DST, VALUE) -> node(DST).heard_vote(SRC, VALUE)
+        invariant have_delivered_vote(SRC, DST, VALUE) -> have_broadcast_vote(SRC, VALUE)
         invariant have_broadcast_accept(NODE, VALUE) -> node(NODE).have_accepted(VALUE)
         invariant node(ID).have_accepted(VALUE) ->
                     exists OTHER. node(OTHER).have_voted(VALUE)
