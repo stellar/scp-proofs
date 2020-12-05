@@ -1,141 +1,49 @@
 #lang ivy1.7
 
 # id_t is the type of node ids
-# self_id is the id_t of each node instance
+# self_id is the node of each node instance
 # val_t is the type of values
 
-isolate node(self_id:id_t) = {
+isolate node = {
 
-    # Interface of a node -- only define ways node can be called here.
-    # Node can be called from application
-    # and asked to begin voting on something.
-    action vote_for(value:val_t)
+    relation voted(SELF:id_t, VAL:val_t)
+    relation accepted(SELF:id_t, VAL:val_t)
+    relation heard_vote(SELF:id_t, SRC:id_t, VAL:val_t)
+    relation heard_accept(SELF:id_t, SRC:id_t, VAL:val_t)
 
-    # Node can also be called from network
-    # and told that someone else voted or accepted.
-    action recv_vote(src:id_t, value:val_t)
-    action recv_accept(src:id_t, value:val_t)
+    action vote(self_id:id_t, v:val_t) =
+    {
+        voted(self_id, v) := true;
+        call network.broadcast(self_id, msg_vote, v)
+    }
 
-    # Logical specs for the interface -- use ghost variables here to track
-    # logical changes to node's knowledge and state over time. These may
-    # also be observed by other modules and other node instances.
-    specification {
-        relation heard_vote(SRC:id_t, VALUE:val_t)
-        relation heard_accept(SRC:id_t, VALUE:val_t)
+    action accept(self_id:id_t, v:val_t) =
+    {
+         accepted(self_id, v) := true;
+         call network.broadcast(self_id, msg_accept, v)
+    }
 
-        relation have_voted(VALUE:val_t)
-        relation have_accepted(VALUE:val_t)
-        relation have_confirmed(VALUE:val_t)
-        relation have_candidate_value
+     action recv_vote(self_id:id_t, src:id_t, val:val_t) =
+     {
+         heard_vote(self_id, src, val) := true
+     }
 
-        after init {
-            heard_vote(ID, VAL) := false;
-            heard_accept(ID, VAL) := false;
-            have_voted(VAL) := false;
-            have_accepted(VAL) := false;
-            have_confirmed(VAL) := false;
-            have_candidate_value := false;
-        }
+    action recv_accept(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_accept(self_id, src, val) := true
+    }
 
-        before vote_for {
-            require ~have_voted(value);
-            require ~have_candidate_value;
-        }
-
-        after vote_for {
-            have_voted(value) := true;
-            call network.broadcast_vote(self_id, value);
-        }
-
-        before recv_vote {
-            require network.have_delivered_vote(src, self_id, value)
-        }
-
-        after recv_vote {
-            heard_vote(src, value) := true;
-
-            # Condition 1 for accepting
-            if ((have_voted(value) | have_accepted(value)) &
-                (exists Q.
-                    (network.is_quorum(Q) &
-                     nset.member(self_id, Q) &
-                     (forall OTHER.
-                        (nset.member(OTHER, Q)
-                         -> (heard_vote(OTHER, value) |
-                             heard_accept(OTHER, value) |
-                             OTHER = self_id)))))) {
-                have_accepted(value) := true;
-                call network.broadcast_accept(self_id, value);
-            };
-
-            # Condition 2 for accepting
-            if (exists B.
-                (network.is_blocking(self_id, B) &
-                 (forall V. (nset.member(V, B) -> heard_accept(V, value))))) {
-                have_accepted(value) := true;
-                call network.broadcast_accept(self_id, value);
-            };
-
-            # Confirm
-            if (have_accepted(value) &
-                (exists Q.
-                    (network.is_quorum(Q) &
-                     forall OTHER.
-                        (nset.member(OTHER, Q)
-                            -> (self_id = OTHER | heard_accept(OTHER, value)))))) {
-                have_confirmed(value) := true;
-                have_candidate_value := true;
-            };
-        }
-
-        after recv_accept {
-            heard_accept(src, value) := true;
-
-            # Condition 1 for accepting
-            if ((have_voted(value) | have_accepted(value)) &
-                (exists Q.
-                    (network.is_quorum(Q) &
-                     nset.member(self_id, Q) &
-                     (forall OTHER .
-                        (nset.member(OTHER, Q)
-                         -> (heard_vote(OTHER, value) |
-                             heard_accept(OTHER, value) |
-                             OTHER = self_id)))))) {
-                have_accepted(value) := true;
-                call network.broadcast_accept(self_id, value);
-            };
-
-            # Condition 2 for accepting
-            if (exists B.
-                (network.is_blocking(self_id, B) &
-                 (forall V . (nset.member(V, B) -> heard_accept(V, value))))) {
-                have_accepted(value) := true;
-                call network.broadcast_accept(self_id, value);
-            };
-
-            # Confirm
-            if (have_accepted(value) &
-                (exists Q.
-                    (network.is_quorum(Q) &
-                     nset.member(self_id, Q) &
-                     forall OTHER.
-                        (nset.member(OTHER, Q)
-                            -> (self_id = OTHER | heard_accept(OTHER, value)))))) {
-                have_confirmed(value) := true;
-                have_candidate_value := true;
-            };
+    # called from the network / manually.
+    action recv(self_id:id_t, m:msg_t) =
+    {
+        if src(m) ~= self_id
+        {
+            if kind(m) = msg_vote
+            {
+                call recv_vote(self_id, src(m), val(m))
+            }
         }
     }
 
-    # Implementation of the interface matching the logical specs -- use concrete
-    # variables here to implement the interface defined and spec'ed above. These
-    # should not be observed outside the current node.
-    implementation {
+} with network, id_t
 
-        # Include any state variables that would actually show up in
-        # an implementation but we don't want to include in the spec.
-        # individual voted : bool
-        implement vote_for {
-        }
-    }
-} with network

@@ -1,20 +1,32 @@
 #lang ivy1.7
 
+
 include set
+include order
 
-type id_t
+instance id_t : iterable
+
+# node identities are a finite iterable type
+
+# voted-on values are 16-bit values
 type val_t
-instance nset : set(id_t)
+interpret val_t -> bv[16]
 
+type msg_kind_t = {msg_vote, msg_accept, msg_confirm}
+
+type msg_t = struct {
+    kind : msg_kind_t,
+    src : id_t,
+    val : val_t
+}
+
+instance nset : set(id_t)
 include node
 include network
 
 # Allow IVy to cause any number of vote_for actions to initiate activities on
 # individual nodes.
-export node(ID).vote_for
+export node.vote
 
-# Allow Ivy to initiate messages from the network side
-export network.broadcast_vote
-export network.deliver_vote
-export network.broadcast_accept
-export network.deliver_accept
+# Extract a runnable node parameterized by a self-id
+extract runner = node, network, id_t
