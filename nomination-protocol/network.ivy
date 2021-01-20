@@ -47,6 +47,21 @@ isolate network = {
     relation is_blocking(V:id_t, B:nset)
     axiom (exists V. is_blocking(V, B)) -> exists V2. nset.member(V2, B)
 
+    # If every member of a quorum accepts V,
+    # then either
+    # 1) Every node has accepted V (not just in the quorum), or
+    # 2) There exists a node that hasn't accepted V, but its v-blocking set has accepted V, so it's going to accept it soon.
+    action assume_cascade = {
+        assume forall Q, V. is_quorum(Q) & (exists N0 . nset.member(N0,Q)) & (forall N . nset.member(N,Q) -> node(N).have_accepted(V))
+                -> (
+                        (forall N1 . node(N1).have_accepted(V)) |
+                        (exists N2, S . ~node(N2).have_accepted(V) & is_blocking(N2, S) &
+                                        (forall N3 . nset.member(N3,S) -> (node(N3).have_accepted(V)))
+                        )
+                   );
+    }
+
+
 
     relation node_heard_v_blocking_accept(NODE:id_t, BLOCKING:nset, VALUE:val_t)
     definition node_heard_v_blocking_accept(NODE, BLOCKING, VALUE) =
@@ -60,6 +75,7 @@ isolate network = {
         relation have_delivered_accept(SRC:id_t, DST:id_t, VALUE:val_t)
 
         after init {
+            call assume_cascade();
             have_broadcast_vote(SRC, VALUE) := false;
             have_broadcast_accept(SRC, VALUE) := false;
             have_delivered_vote(SRC, DST, VALUE) := false;
@@ -67,35 +83,43 @@ isolate network = {
         }
 
         before broadcast_vote {
+            call assume_cascade();
             require node(src).have_voted(value);
         }
         after broadcast_vote {
+            call assume_cascade();
             have_broadcast_vote(src, value) := true;
         }
 
         before deliver_vote {
+            call assume_cascade();
             require have_broadcast_vote(src, value);
             # Remove this next condition to allow message duplication.
             require ~have_delivered_vote(src, dst, value);
         }
         after deliver_vote {
+            call assume_cascade();
             call node(dst).recv_vote(src, value);
             have_delivered_vote(src, dst, value) := true;
         }
 
         before broadcast_accept {
+            call assume_cascade();
             require node(src).have_accepted(value);
         }
         after broadcast_accept {
+            call assume_cascade();
             have_broadcast_accept(src, value) := true;
         }
 
         before deliver_accept {
+            call assume_cascade();
             require have_broadcast_accept(src, value);
             # Remove this next condition to allow message duplication.
             require ~have_delivered_accept(src, dst, value);
         }
         after deliver_accept {
+            call assume_cascade();
             call node(dst).recv_accept(src, value);
             have_delivered_accept(src, dst, value) := true;
         }
