@@ -7,36 +7,18 @@ export udp_net.recv
 
 isolate network =
 {
-    implement udp_net.recv(dst:id_t, m:msg_t)
+    # Deliver the message "src voted v" to dst.
+    action deliver_vote(src:id_t, dst:id_t, v:val_t) =
     {
-        call node.recv(dst, m)
+        require node.voted(src, v);
+        call node.recv_vote(dst, src, v);
     }
 
-    action broadcast(self_id:id_t, k:msg_kind_t, v:val_t)
-    action bcast_msg(src:id_t, m:msg_t)
-
-    implementation
+    # Deliver the message "src accepted v" to dst.
+    action deliver_accept(src:id_t, dst:id_t, v:val_t) =
     {
-        implement bcast_msg(src:id_t, m:msg_t)
-        {
-            var iter := id_t.iter.create(0);
-            while ~iter.is_end
-            {
-                call udp_net.send(src, iter.val, m);
-                iter := iter.next;
-            }
-        }
-
-        implement broadcast(self_id:id_t, k:msg_kind_t, v:val_t)
-        {
-            local m:msg_t
-            {
-                kind(m) := k;
-                val(m) := v;
-                src(m) := self_id;
-                call bcast_msg(self_id, m);
-            }
-        }
+        require node.accepted(src, v);
+        call node.recv_accept(dst, src, v);
     }
 }
 with id_t, udp_net, node

@@ -4,7 +4,19 @@
 include set
 include order
 
-instance id_t : iterable
+#instance id_t : iterable
+
+# id_t is a 1-bit number
+type id_t
+interpret id_t -> bv[1]
+
+# nset is a 2-bit number.
+# This is because we want 2^(# of id_t).
+type nset
+interpret nset -> bv[2]
+
+relation member(X:id_t, S:nset)
+
 
 # node identities are a finite iterable type
 
@@ -20,13 +32,17 @@ type msg_t = struct {
     val : val_t
 }
 
-instance nset : set(id_t)
+#instance nset : set(id_t)
 include node
 include network
 
 # Allow IVy to cause any number of vote_for actions to initiate activities on
 # individual nodes.
 export node.vote
+export node.vote
+export node.check_confirmed
+export network.deliver_vote
+export network.deliver_accept
 
 # Extract a runnable node parameterized by a self-id
 extract runner = node, network, id_t

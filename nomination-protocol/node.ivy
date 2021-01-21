@@ -8,42 +8,72 @@ isolate node = {
 
     relation voted(SELF:id_t, VAL:val_t)
     relation accepted(SELF:id_t, VAL:val_t)
+    relation confirmed(SELF:id_t, VAL:val_t)
     relation heard_vote(SELF:id_t, SRC:id_t, VAL:val_t)
     relation heard_accept(SELF:id_t, SRC:id_t, VAL:val_t)
+
+    relation is_quorum(S:nset)
+    relation is_v_blocking(V:id_t, S:nset)
+    after init {
+# S_3 = {0, 1} is the only quorum.
+        is_quorum(3) := true;
+        is_v_blocking(0, 1) := true;
+        is_v_blocking(1, 2) := true;
+        is_v_blocking(0, 3) := true;
+        is_v_blocking(1, 3) := true;
+
+# Node i is a member of a set n iff (n >> i) & 1
+        member(0, 3) := true;
+        member(1, 3) := true;
+        member(1, 2) := true;
+        member(0, 1) := true;
+    }
 
     action vote(self_id:id_t, v:val_t) =
     {
         voted(self_id, v) := true;
-        call network.broadcast(self_id, msg_vote, v)
     }
 
-    action accept(self_id:id_t, v:val_t) =
+    action recv_vote(self_id:id_t, src:id_t, val:val_t) =
     {
-         accepted(self_id, v) := true;
-         call network.broadcast(self_id, msg_accept, v)
+        heard_vote(self_id, src, val) := true;
+        # Check if I can accept this!
+        if (exists Q. is_quorum(Q) & member(self_id, Q) &
+            (forall V. member(V, Q) -> (V = self_id | heard_vote(self_id, V, val) | heard_accept(self_id, V, val)))) {
+            accepted(self_id, val) := true;
+        };
+        if (exists S. is_v_blocking(self_id, S) &
+            (forall V. member(V, S) -> (V = self_id | heard_accept(self_id, V, val)))) {
+            accepted(self_id, val) := true;
+        };
+        # Check if I can confirm this!
+        if (exists Q. is_quorum(Q) & member(self_id, Q) &
+            (forall V. member(V, Q) -> (V = self_id | heard_accept(self_id, V, val)))) {
+            confirmed(self_id, val) := true;
+        };
     }
-
-     action recv_vote(self_id:id_t, src:id_t, val:val_t) =
-     {
-         heard_vote(self_id, src, val) := true
-     }
 
     action recv_accept(self_id:id_t, src:id_t, val:val_t) =
     {
-        heard_accept(self_id, src, val) := true
+        heard_accept(self_id, src, val) := true;
+        # Check if I can accept this!
+        if (exists Q. is_quorum(Q) & member(self_id, Q) &
+            (forall V. member(V, Q) -> (V = self_id | heard_vote(self_id, V, val) | heard_accept(self_id, V, val)))) {
+            accepted(self_id, val) := true;
+        };
+        if (exists S. is_v_blocking(self_id, S) &
+            (forall V. member(V, S) -> (V = self_id | heard_accept(self_id, V, val)))) {
+            accepted(self_id, val) := true;
+        };
+        # Check if I can confirm this!
+        if (exists Q. is_quorum(Q) & member(self_id, Q) &
+            (forall V. member(V, Q) -> (V = self_id | heard_accept(self_id, V, val)))) {
+            confirmed(self_id, val) := true;
+        };
     }
-
-    # called from the network / manually.
-    action recv(self_id:id_t, m:msg_t) =
-    {
-        if src(m) ~= self_id
-        {
-            if kind(m) = msg_vote
-            {
-                call recv_vote(self_id, src(m), val(m))
-            }
-        }
+    action check_confirmed(self_id:id_t, val:val_t) returns (b:bool)
+    implement check_confirmed {
+        b := confirmed(self_id, val);
     }
-
-} with network, id_t
+} with network, id_t, nset
 

@@ -4,4 +4,24 @@
 module set(t) = {
     type this
     relation member(E:t,S:this)
+    axiom [comp] {
+        relation p(X:t)
+        property exists S. forall E. member(E,S) <-> p(E)
+    }
+
+# Axiom of extensionality (not used here)
+
+    axiom [exten] {
+        property forall E. member(E,S) <-> member(E,T)
+        property S:this = T
+    }
+
+# The following axioms of empty set and full set are actually
+# provable from the above.
+
+    individual empty : this
+    axiom forall E. ~member(E,empty)
+
+    individual universe : this
+    axiom forall E. member(E,universe)
 }
