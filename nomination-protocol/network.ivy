@@ -9,6 +9,14 @@ isolate network =
 {
     relation is_quorum(S:nset)
     relation is_v_blocking(V:id_t, S:nset)
+
+    relation node_heard_quorum_accept_value(NODE:id_t, QUORUM:nset, VALUE:val_t)
+    definition node_heard_quorum_accept_value(NODE, QUORUM, VALUE) =
+        is_quorum(QUORUM) &
+        member(NODE, QUORUM) &
+        (forall OTHER. member(OTHER, QUORUM)
+         -> (NODE = OTHER | node.heard_accept(NODE, OTHER, VALUE)))
+
     after init {
         is_quorum(S) := false;
         is_v_blocking(V, S) := false;
@@ -65,6 +73,9 @@ isolate network =
         -> (forall NODE1, NODE2, VALUE. node.confirmed(NODE1, VALUE) -> node.confirmed(NODE2, VALUE))
     private {
         invariant node.heard_accept(SELF, SRC, VAL) -> node.accepted(SRC, VAL)
+        invariant node.heard_vote(SELF, SRC, VAL) -> node.voted(SRC, VAL)
+        invariant [confirm_backward] (exists QUORUM. node_heard_quorum_accept_value(NODE, QUORUM, VALUE))
+            -> node.confirmed(NODE, VALUE)
     }
 }
 with id_t, udp_net, node, nset
