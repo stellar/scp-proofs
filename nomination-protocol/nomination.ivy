@@ -43,6 +43,9 @@ export node.vote
 export node.check_confirmed
 export network.deliver_vote
 export network.deliver_accept
+export network.set_is_quorum
+export network.set_is_v_blocking
+export network.set_member
 
 # Extract a runnable node parameterized by a self-id
 extract runner = node, network, id_t

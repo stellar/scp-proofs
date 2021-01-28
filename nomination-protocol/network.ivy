@@ -7,9 +7,17 @@ export udp_net.recv
 
 isolate network =
 {
+    relation is_quorum(S:nset)
+    relation is_v_blocking(V:id_t, S:nset)
+    after init {
+        is_quorum(S) := false;
+        is_v_blocking(V, S) := false;
+        member(V, S) := false;
+    }
     # Deliver the message "src voted v" to dst.
     action deliver_vote(src:id_t, dst:id_t, v:val_t) =
     {
+        call assume_cascade();
         require node.voted(src, v);
         call node.recv_vote(dst, src, v);
     }
@@ -17,9 +25,39 @@ isolate network =
     # Deliver the message "src accepted v" to dst.
     action deliver_accept(src:id_t, dst:id_t, v:val_t) =
     {
+        call assume_cascade();
         require node.accepted(src, v);
         call node.recv_accept(dst, src, v);
     }
+
+    action set_is_quorum(s:nset, b:bool) =
+    {
+        is_quorum(s) := b;
+    }
+
+    action set_is_v_blocking(v:id_t, s:nset, b:bool) =
+    {
+        is_v_blocking(v, s) := b;
+    }
+
+    action set_member(v:id_t, s:nset, b:bool) =
+    {
+        member(v, s) := b;
+    }
+# If every member of a quorum accepts V,
+# then either
+# 1) Every node has accepted V (not just in the quorum), or
+# 2) There exists a node that hasn't accepted V, but its v-blocking set has accepted V, so it's going to accept it soon.
+    action assume_cascade = {
+        assume exists Q. (forall V. member(V, Q));
+        assume forall Q, V. is_quorum(Q) & (exists N0 . member(N0,Q)) & (forall N . member(N,Q) -> node.accepted(N, V))
+            -> (
+                    (forall N1 . node.accepted(N1, V)) |
+                    (exists N2, S . ~node.accepted(N2, V) & is_v_blocking(N2, S) &
+                     (forall N3 . member(N3,S) -> node.accepted(N3, V))
+                    )
+               );
+    }
 }
-with id_t, udp_net, node
+with id_t, udp_net, node, nset
 
