@@ -9,14 +9,22 @@ isolate node = {
     relation voted(SELF:id_t, VAL:val_t)
     relation accepted(SELF:id_t, VAL:val_t)
     relation confirmed(SELF:id_t, VAL:val_t)
+    relation have_candidate(SELF:id_t)
     relation heard_vote(SELF:id_t, SRC:id_t, VAL:val_t)
     relation heard_accept(SELF:id_t, SRC:id_t, VAL:val_t)
 
     after init {
+        voted(SELF, VAL) := false;
+        accepted(SELF, VAL) := false;
+        confirmed(SELF, VAL) := false;
+        have_candidate(SELF) := false;
+        heard_vote(SELF, SRC, VAL) := false;
+        heard_accept(SELF, SRC, VAL) := false;
     }
 
     action vote(self_id:id_t, v:val_t) =
     {
+        require ~have_candidate(self_id);
         voted(self_id, v) := true;
     }
 
@@ -36,6 +44,7 @@ isolate node = {
         if (exists Q. network.is_quorum(Q) & member(self_id, Q) &
             (forall V. member(V, Q) -> (V = self_id | heard_accept(self_id, V, val)))) {
             confirmed(self_id, val) := true;
+            have_candidate(self_id) := true;
         };
     }
 
@@ -55,6 +64,7 @@ isolate node = {
         if (exists Q. network.is_quorum(Q) & member(self_id, Q) &
             (forall V. member(V, Q) -> (V = self_id | heard_accept(self_id, V, val)))) {
             confirmed(self_id, val) := true;
+            have_candidate(self_id) := true;
         };
     }
     action check_confirmed(self_id:id_t, val:val_t) returns (b:bool)
