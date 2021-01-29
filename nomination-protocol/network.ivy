@@ -13,10 +13,9 @@ isolate network =
     relation node_accept_condition_1(NODE:id_t, QUORUM:nset, VALUE:val_t)
     definition node_accept_condition_1(NODE, QUORUM, VALUE) =
         is_quorum(QUORUM) &
-        node.voted(NODE, VALUE) &
         member(NODE, QUORUM) &
         (forall OTHER. member(OTHER, QUORUM)
-         -> (NODE = OTHER | node.heard_vote(NODE, OTHER, VALUE) | node.heard_accept(NODE, OTHER, VALUE)))
+         -> ((NODE = OTHER & node.voted(NODE, VALUE)) | node.heard_vote(NODE, OTHER, VALUE) | node.heard_accept(NODE, OTHER, VALUE)))
 
     relation node_accept_condition_2(NODE:id_t, S:nset, VALUE:val_t)
     definition node_accept_condition_2(NODE, S, VALUE) =
@@ -29,7 +28,7 @@ isolate network =
         is_quorum(QUORUM) &
         member(NODE, QUORUM) &
         (forall OTHER. member(OTHER, QUORUM)
-         -> (NODE = OTHER | node.heard_accept(NODE, OTHER, VALUE)))
+         -> ((NODE = OTHER & node.accepted(NODE, VALUE))| node.heard_accept(NODE, OTHER, VALUE)))
 
     after init {
         is_quorum(S) := false;
