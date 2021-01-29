@@ -88,10 +88,7 @@ isolate network =
         invariant [confirm_backward] (exists QUORUM. node_heard_quorum_accept_value(NODE, QUORUM, VALUE))
             -> node.confirmed(NODE, VALUE)
         invariant [accept_forward] node.accepted(NODE, VALUE)
-        -> (
-            (exists QUORUM. node_accept_condition_1(NODE, QUORUM, VALUE)) |
-            (exists S. node_accept_condition_2(NODE, S, VALUE))
-           )
+        -> (exists S. node_accept_condition_1(NODE, S, VALUE) | node_accept_condition_2(NODE, S, VALUE))
     }
     invariant [eventually_same_candidate_set]
         (forall SRC, VALUE.

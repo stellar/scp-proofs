@@ -33,16 +33,16 @@ isolate node = {
         heard_vote(self_id, src, val) := true;
         # Check if I can accept this!
         if (exists Q. network.is_quorum(Q) & member(self_id, Q) &
-            (forall V. member(V, Q) -> (V = self_id | heard_vote(self_id, V, val) | heard_accept(self_id, V, val)))) {
+            (forall V. member(V, Q) -> ((V = self_id & voted(self_id, val)) | heard_vote(self_id, V, val) | heard_accept(self_id, V, val)))) {
             accepted(self_id, val) := true;
         };
         if (exists S. network.is_v_blocking(self_id, S) &
-            (forall V. member(V, S) -> (V = self_id | heard_accept(self_id, V, val)))) {
+            (forall V. member(V, S) -> (V = self_id & accepted(self_id, val)) | heard_accept(self_id, V, val)))) {
             accepted(self_id, val) := true;
         };
         # Check if I can confirm this!
         if (exists Q. network.is_quorum(Q) & member(self_id, Q) &
-            (forall V. member(V, Q) -> (V = self_id | heard_accept(self_id, V, val)))) {
+            (forall V. member(V, Q) -> ((V = self_id & accepted(self_id, val)) | heard_accept(self_id, V, val)))) {
             confirmed(self_id, val) := true;
             have_candidate(self_id) := true;
         };
@@ -53,16 +53,16 @@ isolate node = {
         heard_accept(self_id, src, val) := true;
         # Check if I can accept this!
         if (exists Q. network.is_quorum(Q) & member(self_id, Q) &
-            (forall V. member(V, Q) -> (V = self_id | heard_vote(self_id, V, val) | heard_accept(self_id, V, val)))) {
+            (forall V. member(V, Q) -> ((V = self_id & voted(self_id, val)) | heard_vote(self_id, V, val) | heard_accept(self_id, V, val)))) {
             accepted(self_id, val) := true;
         };
         if (exists S. network.is_v_blocking(self_id, S) &
-            (forall V. member(V, S) -> (V = self_id | heard_accept(self_id, V, val)))) {
+            (forall V. member(V, S) -> (V = self_id & accepted(self_id, val)) | heard_accept(self_id, V, val)))) {
             accepted(self_id, val) := true;
         };
         # Check if I can confirm this!
         if (exists Q. network.is_quorum(Q) & member(self_id, Q) &
-            (forall V. member(V, Q) -> (V = self_id | heard_accept(self_id, V, val)))) {
+            (forall V. member(V, Q) -> ((V = self_id & accepted(self_id, val)) | heard_accept(self_id, V, val)))) {
             confirmed(self_id, val) := true;
             have_candidate(self_id) := true;
         };
