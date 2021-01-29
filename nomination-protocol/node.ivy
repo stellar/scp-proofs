@@ -37,7 +37,7 @@ isolate node = {
             accepted(self_id, val) := true;
         };
         if (exists S. network.is_v_blocking(self_id, S) &
-            (forall V. member(V, S) -> (V = self_id & accepted(self_id, val)) | heard_accept(self_id, V, val)))) {
+            (forall V. member(V, S) -> (V = self_id & accepted(self_id, val)) | heard_accept(self_id, V, val))) {
             accepted(self_id, val) := true;
         };
         # Check if I can confirm this!
@@ -57,7 +57,7 @@ isolate node = {
             accepted(self_id, val) := true;
         };
         if (exists S. network.is_v_blocking(self_id, S) &
-            (forall V. member(V, S) -> (V = self_id & accepted(self_id, val)) | heard_accept(self_id, V, val)))) {
+            (forall V. member(V, S) -> (V = self_id & accepted(self_id, val)) | heard_accept(self_id, V, val))) {
             accepted(self_id, val) := true;
         };
         # Check if I can confirm this!
