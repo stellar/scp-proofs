@@ -1,5 +1,0 @@
-node.vote(0, 3)
-node.vote(1, 3)
-network.deliver_vote(0, 1, 3)
-network.deliver_vote(1, 0, 3)
-network.deliver_accept(1, 0, 3)
