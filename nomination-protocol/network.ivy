@@ -66,17 +66,17 @@ isolate network =
                     )
                );
     }
-    invariant [eventually_same_candidate_set]
-        (forall SRC, VALUE.
-         (node.voted(SRC, VALUE) -> (forall DST. node.heard_vote(DST, SRC, VALUE))) &
-         (node.accepted(SRC, VALUE) -> (forall DST. node.heard_accept(DST, SRC, VALUE))))
-        -> (forall NODE1, NODE2, VALUE. node.confirmed(NODE1, VALUE) -> node.confirmed(NODE2, VALUE))
     private {
         invariant node.heard_accept(SELF, SRC, VAL) -> node.accepted(SRC, VAL)
         invariant node.heard_vote(SELF, SRC, VAL) -> node.voted(SRC, VAL)
         invariant [confirm_backward] (exists QUORUM. node_heard_quorum_accept_value(NODE, QUORUM, VALUE))
             -> node.confirmed(NODE, VALUE)
     }
+    invariant [eventually_same_candidate_set]
+        (forall SRC, VALUE.
+         (node.voted(SRC, VALUE) -> (forall DST. SRC = DST | node.heard_vote(DST, SRC, VALUE))) &
+         (node.accepted(SRC, VALUE) -> (forall DST. SRC = DST | node.heard_accept(DST, SRC, VALUE))))
+        -> (forall NODE1, NODE2, VALUE. node.confirmed(NODE1, VALUE) -> node.confirmed(NODE2, VALUE))
 }
 with id_t, udp_net, node, nset
 
