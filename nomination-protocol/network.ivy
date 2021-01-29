@@ -10,6 +10,20 @@ isolate network =
     relation is_quorum(S:nset)
     relation is_v_blocking(V:id_t, S:nset)
 
+    relation node_accept_condition_1(NODE:id_t, QUORUM:nset, VALUE:val_t)
+    definition node_accept_condition_1(NODE, QUORUM, VALUE) =
+        is_quorum(QUORUM) &
+        node.voted(NODE, VALUE) &
+        member(NODE, QUORUM) &
+        (forall OTHER. member(OTHER, QUORUM)
+         -> (NODE = OTHER | node.heard_vote(NODE, OTHER, VALUE) | node.heard_accept(NODE, OTHER, VALUE)))
+
+    relation node_accept_condition_2(NODE:id_t, S:nset, VALUE:val_t)
+    definition node_accept_condition_2(NODE, S, VALUE) =
+        is_v_blocking(NODE, S) &
+        ~member(NODE, S) &
+        (forall OTHER. member(OTHER, S) -> node.heard_accept(NODE, OTHER, VALUE))
+
     relation node_heard_quorum_accept_value(NODE:id_t, QUORUM:nset, VALUE:val_t)
     definition node_heard_quorum_accept_value(NODE, QUORUM, VALUE) =
         is_quorum(QUORUM) &
@@ -69,8 +83,15 @@ isolate network =
     private {
         invariant node.heard_accept(SELF, SRC, VAL) -> node.accepted(SRC, VAL)
         invariant node.heard_vote(SELF, SRC, VAL) -> node.voted(SRC, VAL)
+        invariant node.accepted(NODE, VAL) -> (exists OTHER. node.voted(OTHER, VAL))
+        invariant node.confirmed(NODE, VAL) -> node.accepted(NODE, VAL)
         invariant [confirm_backward] (exists QUORUM. node_heard_quorum_accept_value(NODE, QUORUM, VALUE))
             -> node.confirmed(NODE, VALUE)
+        invariant [accept_forward] node.accepted(NODE, VALUE)
+        -> (
+            (exists QUORUM. node_accept_condition_1(NODE, QUORUM, VALUE)) |
+            (exists S. node_accept_condition_2(NODE, S, VALUE))
+           )
     }
     invariant [eventually_same_candidate_set]
         (forall SRC, VALUE.
