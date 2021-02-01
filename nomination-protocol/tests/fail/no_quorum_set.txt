@@ -1,3 +1,4 @@
+network.start_network
 node.vote(0, 10)
 node.vote(1, 10)
 network.deliver_vote(1, 0, 10)

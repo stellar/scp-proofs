@@ -24,6 +24,7 @@ isolate node = {
 
     action vote(self_id:id_t, v:val_t) =
     {
+        require network.network_started;
         require ~have_candidate(self_id);
         voted(self_id, v) := true;
     }

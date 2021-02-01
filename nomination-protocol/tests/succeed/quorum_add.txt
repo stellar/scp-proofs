@@ -7,6 +7,7 @@ network.set_is_v_blocking(0, 1, true)
 network.set_is_v_blocking(1, 2, true)
 network.set_is_v_blocking(0, 3, true)
 network.set_is_v_blocking(1, 3, true)
+network.start_network
 node.vote(0, 10)
 node.vote(1, 10)
 network.deliver_vote(1, 0, 10)

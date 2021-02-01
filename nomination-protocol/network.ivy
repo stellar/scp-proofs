@@ -9,6 +9,7 @@ isolate network =
 {
     relation is_quorum(S:nset)
     relation is_v_blocking(V:id_t, S:nset)
+    relation network_started
 
     relation node_accept_condition_1(NODE:id_t, QUORUM:nset, VALUE:val_t)
     definition node_accept_condition_1(NODE, QUORUM, VALUE) =
@@ -34,6 +35,7 @@ isolate network =
         is_quorum(S) := false;
         is_v_blocking(V, S) := false;
         member(V, S) := false;
+        network_started := false;
     }
     # Deliver the message "src voted v" to dst.
     action deliver_vote(src:id_t, dst:id_t, v:val_t) =
@@ -53,23 +55,32 @@ isolate network =
 
     action set_is_quorum(s:nset, b:bool) =
     {
+        require ~network_started;
         is_quorum(s) := b;
     }
 
     action set_is_v_blocking(v:id_t, s:nset, b:bool) =
     {
+        require ~network_started;
         is_v_blocking(v, s) := b;
     }
 
     action set_member(v:id_t, s:nset, b:bool) =
     {
+        require ~network_started;
         member(v, s) := b;
+    }
+    action start_network =
+    {
+        require ~network_started;
+        network_started := true;
     }
 # If every member of a quorum accepts V,
 # then either
 # 1) Every node has accepted V (not just in the quorum), or
 # 2) There exists a node that hasn't accepted V, but its v-blocking set has accepted V, so it's going to accept it soon.
     action assume_cascade = {
+        assume network_started;
         assume exists Q. (is_quorum(Q) & forall V. member(V, Q));
         assume forall Q, V. is_quorum(Q) & (exists N0 . member(N0,Q)) & (forall N . member(N,Q) -> node.accepted(N, V))
             -> (
