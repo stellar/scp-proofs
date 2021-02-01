@@ -1,5 +1,14 @@
 #lang ivy1.7
 
+# Note about liveness: Once a quorum unanimously vote to prepare v, then the
+# outcome is univalent (for v), and it is easy to prove that a decision is
+# reached under synchrony. Now how do we make sure that a quorum unanimously
+# prepares the same value? Since nodes prepare the highest confirmed prepared
+# value, we must rely on the cascading effect in a long-enough round. Because
+# of SCP's bounded-state optimizations, this might be tricky. The crux is that
+# the highest confirmed prepared by an intact should propagate, and thus
+# eventually all have it.
+
 include order
 
 type value
@@ -107,10 +116,9 @@ object protocol = {
             require accepted_prepared(nb,b,v);
             received_accept_prepare(na,nb,b,v) := true;
             if exists Q . is_quorum(Q) & member(na,Q) & forall N . member(N,Q) -> received_accept_prepare(na,N,b,v) {
-                # NOTE: below, this is an old observation that is actually wrong. This is not needed.
-                #confirmed_prepared(na,b,v) := true; # we must confirm prepared even if we left the ballot because that's used to pick the value to prepare in higher ballots.
+                confirmed_prepared(na,b,v) := true; # we must confirm prepared even if we left the ballot because that's used to pick the value to prepare in higher ballots; not doing it would be a liveness issue because, even in a long-enough ballot, nodes would not converge on the same confirmed prepared value.
+                # TODO: in fact, nodes in SCP remember the highest bla bla... and we need to confirm based on this information (see comment at the top of this file)
                 if ~left_ballot(na,b) {
-                    confirmed_prepared(na,b,v) := true;
                     voted_committed(na,b,v) := true;
                     # NOTE: we do not vote if we left ballot b already. This is important because if anything has already been voted prepared at a higher ballot, then we risk a contradiction; this would violate the invariant stating that votes to commit are not contradicted unless they have been overruled.
                     # NOTE: we could add note to vote twice, but that does not seem to cause harm
@@ -228,7 +236,7 @@ object protocol = {
         # Here we prove an additional safety properties which we later use in the liveness proof
 
         # A value unanimously voted prepared cannot be contradicted. We use this to prove that, in a long-enough ballot in which all intact nodes prepare the same value, all intact nodes confirm that value as committed (because, as per the invariant, its progress cannot be stopped by a contradicting accepted-committed value).
-        # NOTE: this is an interesting property of the protocol, i.e. the outcome becomes univalent as soon as a unanimously prepares a value.
+        # NOTE: this is an interesting property of the protocol, i.e. the outcome becomes univalent as soon as a quorum unanimously prepares a value.
         invariant [inv1] (forall N . intact(N) -> voted_prepared(N,B,V)) & intact(N) & accepted_committed(N,B2,V2) & B2 < B -> V = V2
 
         # An accepted prepared value cannot be contradicted. We use this to prove that once an intact nodes confirms (b,v) as prepared, the cascade effect occurs (because (b,v) is never contradicted) and eventually all intact nodes confirm.
@@ -302,4 +310,22 @@ object protocol = {
         }
 
     } with actions, ballot, node_properties, quorum_properties.qi_intact, quorum_properties.blocking, quorum_properties.intact_is_quorum
+
+    isolate safety_4 = {
+        individual b0:ballot
+        individual v0:value
+        individual n1:node
+        individual n2:node
+        individual q0:nset
+
+        # a confirmed prepared pair cannot be contradicted, thus receiving "accept prepare" from a blocking set causes to accept:
+        conjecture intact(N1) & blocks_slices(S,N1) & (forall N2. member(N2,S) -> received_accept_prepare(N1,N2,b0,v0)) & intact(N3) & confirmed_prepared(N3,b0,v0) -> accepted_prepared(N1,b0,v0)
+
+        # If an intact node confirms (b,v) as prepared and another intact node has not yet accepted (b,v) as prepared, then there must be an accept message in flight
+        conjecture intact(n1) & intact(n2) & confirmed_prepared(n1,b0,v0) & ~accepted_prepared(n2,b0,v0) -> (exists N1,N2 . intact(N1) & intact(N2) & accepted_prepared(N1,b0,v0) & ~received_accept_prepare(N2,N1,b0,v0))
+
+        # If an intact node confirms (b,v) as prepared and another intact node has not yet confirmed (b,v) as prepared, then there must be a message in flight.
+        conjecture [main] intact(n1) & intact(n2) & confirmed_prepared(n1,b0,v0) & ~confirmed_prepared(n2,b0,v0) -> (exists N1,N2 . intact(N1) & intact(N2) & accepted_prepared(N1,b0,v0) & ~received_accept_prepare(N2,N1,b0,v0))
+
+    } with actions, ballot, node_properties, quorum_properties
 }
