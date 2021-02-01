@@ -9,6 +9,9 @@ isolate network =
 {
     relation is_quorum(S:nset)
     relation is_v_blocking(V:id_t, S:nset)
+# network_started is important since
+# without this it'd be much more difficult to reason about voting, accepting, confirming.
+# e.g., Checking if there _was_ a quorum when a node confirmed something seems hard.
     relation network_started
 
     relation node_accept_condition_1(NODE:id_t, QUORUM:nset, VALUE:val_t)
