@@ -31,8 +31,8 @@ isolate network =
     definition node_heard_quorum_accept_value(NODE, QUORUM, VALUE) =
         is_quorum(QUORUM) &
         member(NODE, QUORUM) &
-        (forall OTHER. member(OTHER, QUORUM)
-         -> ((NODE = OTHER & node.accepted(NODE, VALUE))| node.heard_accept(NODE, OTHER, VALUE)))
+        node.accepted(NODE, VALUE) &
+        (forall OTHER. member(OTHER, QUORUM) -> (NODE = OTHER | node.heard_accept(NODE, OTHER, VALUE)))
 
     after init {
         is_quorum(S) := false;
@@ -94,6 +94,13 @@ isolate network =
                );
     }
     private {
+        invariant node.voted(SRC, VAL) -> network_started
+        invariant node.accepted(SRC, VAL) -> network_started
+        invariant node.confirmed(SRC, VAL) -> network_started
+        invariant node.have_candidate(SRC) -> network_started
+        invariant node.heard_accept(SELF, SRC, VAL) -> network_started
+        invariant node.heard_vote(SELF, SRC, VAL) -> network_started
+
         invariant node.heard_accept(SELF, SRC, VAL) -> node.accepted(SRC, VAL)
         invariant node.heard_vote(SELF, SRC, VAL) -> node.voted(SRC, VAL)
         invariant node.accepted(NODE, VAL) -> (exists OTHER. node.voted(OTHER, VAL))
