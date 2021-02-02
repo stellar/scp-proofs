@@ -215,14 +215,14 @@ object protocol = {
         individual s:nset
 
         isolate additional_safety = {
-            invariant [cascade] intact(n1) & (exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,b,v))) -> (forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v))))
+            property [cascade] intact(n1) & (exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,b,v))) -> (forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v))))
             proof {
                 tactic skolemize
                 assume cascade_thm with p(X) = accepted_prepared(X,b,v), q0 = _Q
             }
 
             # TODO: this is provable: if a intact node accepted prepared (b,v), then n3 has not accepted anything contradictory.
-            invariant [inv1] intact(n3) & blocks_slices(s,n3) & (forall N .member(N,s) -> received_accept_prepare(n3,N,b,v)) -> accepted_prepared(n3,b,v)
+            #invariant [inv1] intact(n3) & blocks_slices(s,n3) & (forall N .member(N,s) -> received_accept_prepare(n3,N,b,v)) -> accepted_prepared(n3,b,v)
 
         } with actions, node_properties
 
@@ -257,10 +257,9 @@ object protocol = {
             invariant intact(n1) & confirmed_prepared(n1,b,v) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> received_accept_prepare(n1,N,b,v))
             invariant well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
             invariant (l2s_frozen | l2s_saved) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,b,v))
-            # now this should be trivial with [additional_safety.cascade], but it is a problem because we can't use tactics:
-            invariant (l2s_frozen | l2s_saved) -> ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
 
-            # TODO: the following should follow from above... but we need it in the post-state too! This won't work even if we proved it with a tactic...
+            # NOTE: the two last invariants pass because [cascade] is a property. It would not work if it was an invariant because we would have to assume it in the post-state too, and we can't use tactics
+            invariant (l2s_frozen | l2s_saved) -> ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
             invariant l2s_saved -> ($l2s_w. ~((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v))))))
         }
 
