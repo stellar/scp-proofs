@@ -112,6 +112,45 @@ isolate network =
             (exists QUORUM. node_heard_quorum_accept_value(NODE, QUORUM, VALUE))
         invariant [accept_forward] node.accepted(NODE, VALUE)
         -> (exists S. node_accept_condition_1(NODE, S, VALUE) | node_accept_condition_2(NODE, S, VALUE))
+    invariant [node_accept_condition_1_forward]
+        node_accept_condition_1(NODE, QUORUM, VALUE) ->
+            is_quorum(QUORUM) &
+            member(NODE, QUORUM) &
+            (forall OTHER. member(OTHER, QUORUM)
+             -> ((NODE = OTHER & node.voted(NODE, VALUE)) | node.heard_vote(NODE, OTHER, VALUE) | node.heard_accept(NODE, OTHER, VALUE)))
+
+    invariant [node_accept_condition_1_backward]
+            (is_quorum(QUORUM) &
+            member(NODE, QUORUM) &
+            (forall OTHER. member(OTHER, QUORUM)
+             -> ((NODE = OTHER & node.voted(NODE, VALUE)) | node.heard_vote(NODE, OTHER, VALUE) | node.heard_accept(NODE, OTHER, VALUE))))
+            -> node_accept_condition_1(NODE, QUORUM, VALUE)
+
+    invariant [node_accept_condition_2_forward]
+        node_accept_condition_2(NODE, S, VALUE) ->
+            is_v_blocking(NODE, S) &
+            ~member(NODE, S) &
+            (forall OTHER. member(OTHER, S) -> node.heard_accept(NODE, OTHER, VALUE))
+
+    invariant [node_accept_condition_2_backward]
+        (is_v_blocking(NODE, S) &
+        ~member(NODE, S) &
+        (forall OTHER. member(OTHER, S) -> node.heard_accept(NODE, OTHER, VALUE)))
+            -> node_accept_condition_2(NODE, S, VALUE)
+
+    invariant [node_heard_quorum_accept_value_forward]
+        node_heard_quorum_accept_value(NODE, QUORUM, VALUE) ->
+            is_quorum(QUORUM) &
+            member(NODE, QUORUM) &
+            node.accepted(NODE, VALUE) &
+            (forall OTHER. member(OTHER, QUORUM) -> (NODE = OTHER | node.heard_accept(NODE, OTHER, VALUE)))
+
+    invariant [node_heard_quorum_accept_value_backward]
+            is_quorum(QUORUM) &
+            member(NODE, QUORUM) &
+            node.accepted(NODE, VALUE) &
+            (forall OTHER. member(OTHER, QUORUM) -> (NODE = OTHER | node.heard_accept(NODE, OTHER, VALUE)))
+        -> node_heard_quorum_accept_value(NODE, QUORUM, VALUE)
     }
     invariant [eventually_same_candidate_set]
         (forall SRC, VALUE.
