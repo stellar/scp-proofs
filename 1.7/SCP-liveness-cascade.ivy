@@ -221,18 +221,20 @@ object protocol = {
                 assume cascade_thm with p(X) = accepted_prepared(X,b,v), q0 = _Q
             }
 
+            # TODO: this is provable: if a intact node accepted prepared (b,v), then n3 has not accepted anything contradictory.
+            invariant [inv1] intact(n3) & blocks_slices(s,n3) & (forall N .member(N,s) -> received_accept_prepare(n3,N,b,v)) -> accepted_prepared(n3,b,v)
+
         } with actions, node_properties
 
         temporal property (
-            # fair message delivery:
-            (forall N1,N2,B,V . intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V)))
-            # witnesses n1, n2, b, and v:
+            # negation of the ultimate goal:
+            (exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V)))
+            # witnesses n1, n2, b, and v
             & ( (forall N1,N2,B,V.
                     intact(N1) & intact(N2) -> globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V)))
                 | ( intact(n1) & intact(n2) & ~globally (confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v)))
               )
-            # conclusion:
-            ) -> forall N1,N2,B,V . intact(N1) & intact(N2) -> globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))
+            ) -> eventually globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
         proof {
             tactic l2s with
             invariant ~(l2s_waiting & l2s_frozen) & ~(l2s_frozen & l2s_saved) & ~(l2s_waiting & l2s_saved)
@@ -240,6 +242,9 @@ object protocol = {
             invariant l2s_frozen -> l2s_a(N:node) & l2s_a(B:ballot) & l2s_a(V:value)
 
             # negation of the goal:
+            invariant globally ~globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
+            invariant ~globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
+
             invariant exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))
             # resulting witnesses:
             invariant intact(n1) & intact(n2) & ~globally (confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v))
@@ -249,32 +254,100 @@ object protocol = {
             invariant (l2s_frozen | l2s_saved) -> confirmed_prepared(n1,b,v) & globally ~confirmed_prepared(n2,b,v)
             invariant l2s_saved -> $was$ confirmed_prepared(n1,b,v) & ~confirmed_prepared(n2,b,v)
 
-            # now we show that, because we have `globally ~confirmed_prepared(n2,b,v)`, there is a message from intact to intact that is never received (this involves the cascade theorem); thus, we never stop waiting. QED.
-
             invariant intact(n1) & confirmed_prepared(n1,b,v) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> received_accept_prepare(n1,N,b,v))
             invariant well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
             invariant (l2s_frozen | l2s_saved) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,b,v))
-            # now this shoudl be trivial with [additional_safety.cascade], but it is a problem because we can't use tactics:
+            # now this should be trivial with [additional_safety.cascade], but it is a problem because we can't use tactics:
             invariant (l2s_frozen | l2s_saved) -> ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
-            invariant (l2s_frozen | l2s_saved) -> (forall N . intact(N) -> accepted_prepared(N,b,v)) # case (a)
 
-            # Now we have two cases: either (a) all intact nodes accepted (b,v) as prepared, or (b) one intact node that did not is blocked by a set of intact nodes that accepted (b,v) as prepared
-            # In case (a), n2 will confirm (b,v) prepared when receiving those messages, which contradicts `globally ~confirmed_prepared(n2,b,v)`
-            # In case (b), let n3 be the blocked node and s the blocking s; when receiving all messages from the set s, n3 will newly accept (b,v) as prepared, and thus saved state and current state will differ
-
-            # fairness of message delivery:
-            invariant intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V))
-
-            # case (a)
-            invariant intact(N1) & N2=n2 & B=b & V=v -> (($l2s_w N1,N2,B,V . received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(n2,N1,b,v) | globally ~received_accept_prepare(N2,N1,B,V))
-            invariant intact(N1) & N2=n2 & B=b & V=v & accepted_prepared(N1,b,v) -> (($l2s_w N1,N2,B,V . received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(n2,N1,b,v))
-            invariant (forall N. intact(N) -> received_accept_prepare(n2,N,b,v)) -> confirmed_prepared(n2,b,v)
-            # end case (a)
-
-            # case (b)
-            # TODO: here it would be nice to have witnesses for N2 and S; for now let's try to do it using a temporal lemma
-
-
+            # TODO: the following should follow from above... but we need it in the post-state too! This won't work even if we proved it with a tactic...
+            invariant l2s_saved -> ($l2s_w. ~((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v))))))
         }
+
+        #temporal property (
+            ## fair message delivery:
+            #(forall N1,N2,B,V . intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V)))
+            ## witnesses n1, n2, b, and v (for the negation of the conclusion below):
+            #& ( (forall N1,N2,B,V.
+                    #intact(N1) & intact(N2) -> globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V)))
+                #| ( intact(n1) & intact(n2) & ~globally (confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v)))
+              #)
+            ## witnesses n3 and s (we do a case split on this prophecy):
+            #& ((exists N3,S .
+                    #eventually globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))
+                #->  eventually globally (intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v)))))
+            ## conclusion:
+            #) -> forall N1,N2,B,V . intact(N1) & intact(N2) -> globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))
+        #proof {
+            #tactic l2s with
+            #invariant ~(l2s_waiting & l2s_frozen) & ~(l2s_frozen & l2s_saved) & ~(l2s_waiting & l2s_saved)
+            #invariant l2s_d(N:node) & l2s_d(B:ballot) & l2s_d(V:value)
+            #invariant l2s_frozen -> l2s_a(N:node) & l2s_a(B:ballot) & l2s_a(V:value)
+
+            ## fairness of message delivery:
+            #invariant intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V))
+            ##invariant intact(N1) & intact(N2) & accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V)
+            #invariant intact(N1) & intact(N2) -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V) | globally ~received_accept_prepare(N2,N1,B,V)
+            #invariant intact(N1) & intact(N2) & accepted_prepared(N1,B,V) -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V)
+
+            ## the prophecy case split: (a) | (b)
+            #invariant  (forall N3,S . globally (~globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))) | (exists N3,S . eventually globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))
+
+            ## case (b)
+            ## here we easily prove that we never stop waiting, otherwise, by [additional_safety.inv1], n3 accepts (b,v) as prepared
+            #invariant (exists N3,S . eventually globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))
+                #-> eventually globally (intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))
+            #invariant (exists N3,S . eventually globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))
+                #-> ($l2s_w. globally (intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))) | globally (intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))
+            #invariant (exists N3,S . eventually globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v))))) & (l2s_frozen | l2s_saved)
+                #-> globally (intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))
+            #invariant (exists N3,S . eventually globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v))))) & l2s_saved
+                #-> (forall N . member(N,s) -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N,n3,b,v) | received_accept_prepare(n3,N,b,v))
+
+            ## case (a)
+
+            ## negation of the goal:
+            #invariant exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))
+            ## resulting witnesses:
+            #invariant intact(n1) & intact(n2) & ~globally (confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v))
+
+            ## at the save point, n1 has confirmed prepared and n2 has not:
+            #invariant ($l2s_w . ~(confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v))) | (confirmed_prepared(n1,b,v) & globally ~confirmed_prepared(n2,b,v))
+            #invariant (l2s_frozen | l2s_saved) -> confirmed_prepared(n1,b,v) & globally ~confirmed_prepared(n2,b,v)
+            #invariant l2s_saved -> $was$ confirmed_prepared(n1,b,v) & ~confirmed_prepared(n2,b,v)
+
+            ## now we show that, because we have `globally ~confirmed_prepared(n2,b,v)`, there is a message from intact to intact that is never received (this involves the cascade theorem); thus, we never stop waiting. QED.
+
+            #invariant intact(n1) & confirmed_prepared(n1,b,v) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> received_accept_prepare(n1,N,b,v))
+            #invariant well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
+            #invariant (l2s_frozen | l2s_saved) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,b,v))
+            ## now this shoudl be trivial with [additional_safety.cascade], but it is a problem because we can't use tactics:
+            #invariant (l2s_frozen | l2s_saved) -> ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
+            ##invariant (l2s_frozen | l2s_saved) -> (forall N . intact(N) -> accepted_prepared(N,b,v)) # case (a)
+
+            #invariant  l2s_saved -> ($l2s_w N3,S. ~(intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))(N3,S) | (forall N . intact(N) -> accepted_prepared(N,b,v)) | globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v))))
+            ##invariant (globally (~globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))) & l2s_saved & ~($l2s_w N3,S. ~(intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))(N3,S) -> (forall N . intact(N) -> accepted_prepared(N,b,v))
+
+            ##| ~(intact(N3) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v))))
+            ##invariant (globally (~globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))) & l2s_saved & (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))) -> ($l2s_w N3,S. ~(intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))
+
+            ## Now we have two cases: either (a) all intact nodes accepted (b,v) as prepared, or (b) one intact node that did not is blocked by a set of intact nodes that accepted (b,v) as prepared
+            ## In case (a), n2 will confirm (b,v) prepared when receiving those messages, which contradicts `globally ~confirmed_prepared(n2,b,v)`
+            ## In case (b), let n3 be the blocked node and s the blocking s; when receiving all messages from the set s, n3 will newly accept (b,v) as prepared, and thus saved state and current state will differ
+
+            ## case (a)
+            #invariant intact(N1) & N2=n2 & B=b & V=v -> (($l2s_w N1,N2,B,V . received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(n2,N1,b,v) | globally ~received_accept_prepare(N2,N1,B,V))
+            #invariant intact(N1) & N2=n2 & B=b & V=v & accepted_prepared(N1,b,v) -> (($l2s_w N1,N2,B,V . received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(n2,N1,b,v))
+            #invariant (forall N. intact(N) -> received_accept_prepare(n2,N,b,v)) -> confirmed_prepared(n2,b,v)
+            ## end case (a)
+
+            ## case (a)
+            #invariant (globally (~globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))) -> ~globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v))))
+            ##invariant ($l2s_w N3,S. ~(intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))(N3,S) | ~(intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))) | globally (intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v))))
+
+
+
+
+        #}
     } with actions, node_properties, quorum_properties.intact_is_quorum
 }
