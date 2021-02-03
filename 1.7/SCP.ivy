@@ -4,10 +4,14 @@
 # outcome is univalent (for v), and it is easy to prove that a decision is
 # reached under synchrony. Now how do we make sure that a quorum unanimously
 # prepares the same value? Since nodes prepare the highest confirmed prepared
-# value, we must rely on the cascading effect in a long-enough round. Because
-# of SCP's bounded-state optimizations, this might be tricky. The crux is that
-# the highest confirmed prepared by an intact should propagate, and thus
-# eventually all have it.
+# value, we must rely on the cascading effect in a long-enough round to make
+# sure that all nodes agree on the highest confirmed prepared value by the end
+# of the round, and thus propose the same this in the next round. 
+
+# Because of SCP's state-bounding optimizations, this might be tricky. The crux
+# is that the highest confirmed prepared by an intact should propagate, and
+# thus eventually all have it. For now, we formalize a version of the protocol
+# that does not have those optimizations
 
 include order
 
@@ -215,7 +219,7 @@ object protocol = {
 
     isolate safety = {
 
-        # Here we prove that two intertwined nodes never disagree.
+        # Here we prove that two intertwined nodes never disagree. This is the main safety property of SCP.
 
         # the main safety property:
         invariant [intertwined_safe] intertwined(N1) & intertwined(N2) & confirmed_committed(N1,B1,V1) & confirmed_committed(N2,B2,V2) -> V1 = V2
@@ -244,7 +248,7 @@ object protocol = {
 
     isolate safety_2 = {
 
-        # Here we prove an additional safety properties which we later use in the liveness proof
+        # Here we prove a additional safety properties which we later use in the liveness proof
 
         # A value unanimously voted prepared cannot be contradicted. We use this to prove that, in a long-enough ballot in which all intact nodes prepare the same value, all intact nodes confirm that value as committed (because, as per the invariant, its progress cannot be stopped by a contradicting accepted-committed value).
         # NOTE: this is an interesting property of the protocol, i.e. the outcome becomes univalent as soon as a quorum unanimously prepares a value.
@@ -300,7 +304,11 @@ object protocol = {
 
     # Liveness proofs
 
-    # We would like to prove that if an intact node confirms (b,v) as prepared, then eventually all intact nodes do so.
+    # For now, we would like to prove that if an intact node confirms (b,v) as
+    # prepared, then eventually all intact nodes do so. Later we will use this
+    # to prove that, in a long-enough synchronous ballot, all node agree on the
+    # highest confirmed prepared value by the end of the ballot.
+
     # We carry out the proof in two steps.
 
     isolate liveness_step_1 = {
@@ -319,7 +327,11 @@ object protocol = {
             }
         } with actions, node_properties
 
-        # First we prove that, given the negation of the overall goal, there are two cases: either all intact nodes have accepted (b,v) as prepared, or there exists an intact node which has not but is blocked by a set of intact nodes that has. We use the cascade theorem to establish this property.
+        # We prove that, given the negation of the overall goal, there are two
+        # cases: either all intact nodes have accepted (b,v) as prepared, or
+        # there exists an intact node which has not but is blocked by a set of
+        # intact nodes that has. We use the cascade theorem to establish this
+        # property.
         temporal property (
             # negation of the ultimate goal:
             (exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V)))
@@ -360,6 +372,7 @@ object protocol = {
 
     isolate liveness_step_2 = {
 
+        # temporal witnesses:
         individual b:ballot
         individual v:value
         individual n1:node
@@ -368,7 +381,6 @@ object protocol = {
         individual s:nset
 
         isolate additional_safety = {
-            # TODO: this is provable: if an intact node accepted prepared (b,v), then n3 has not accepted anything contradictory.
             invariant [inv1] intact(n3) & blocks_slices(s,n3) & (forall N .member(N,s) -> received_accept_prepare(n3,N,b,v)) -> accepted_prepared(n3,b,v)
 
             invariant [inv2] intact(n2) & (forall N. intact(N) -> received_accept_prepare(n2,N,b,v)) -> confirmed_prepared(n2,b,v)
