@@ -1,0 +1,441 @@
+#lang ivy1.7
+
+# Note about liveness: Once a quorum unanimously vote to prepare v, then the
+# outcome is univalent (for v), and it is easy to prove that a decision is
+# reached under synchrony. Now how do we make sure that a quorum unanimously
+# prepares the same value? Since nodes prepare the highest confirmed prepared
+# value, we must rely on the cascading effect in a long-enough round. Because
+# of SCP's bounded-state optimizations, this might be tricky. The crux is that
+# the highest confirmed prepared by an intact should propagate, and thus
+# eventually all have it.
+
+include order
+
+type value
+type node
+type nset # sets of nodes
+instance ballot : unbounded_sequence
+
+relation well_behaved(N:node)
+relation intertwined(N:node)
+relation intact(N:node)
+
+relation member(N:node, S:nset)
+relation is_quorum(Q:nset)
+relation blocks_slices(S:nset, N:node)
+
+trusted isolate node_properties = {
+    # intact nodes are intertwined
+    property intact(N) -> intertwined(N)
+    # intertwined nodes are well-behaved
+    property intertwined(N) -> well_behaved(N)
+}
+
+trusted isolate quorum_properties = {
+    property [qi_intertwined] (exists N1 . intertwined(N1) & is_quorum(Q1) & member(N1,Q1)) & (exists N2 . intertwined(N2) & is_quorum(Q2) & member(N2,Q2)) -> exists N3 . well_behaved(N3) & member(N3,Q1) & member(N3,Q2)
+    property [qi_intact] (exists N1 . intact(N1) & is_quorum(Q1) & member(N1,Q1)) & (exists N2 . intact(N2) & is_quorum(Q2) & member(N2,Q2)) -> exists N3 . intact(N3) & member(N3,Q1) & member(N3,Q2)
+    # a set that blocks an intact nodes contains an intact node:
+    property [blocking] (exists N . intact(N) & blocks_slices(S,N)) -> exists N2 . member(N2,S) & intact(N2)
+    # the set of all intact nodes is a quorum
+    property [intact_is_quorum] exists Q . (forall N . member(N,Q) <-> intact(N)) & is_quorum(Q)
+}
+
+axiom [cascade_thm] {
+    individual q0:nset
+    relation p(N:node)
+    # assumptions:
+    property is_quorum(q0) & (exists N0 . intact(N0) & member(N0,q0))
+    property forall N . intact(N) & member(N,q0) -> p(N)
+    # the conclusion:
+    property (forall N . intact(N) -> p(N)) | (exists N2,S . intact(N2) & ~p(N2) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & p(N3))))
+}
+
+object protocol = {
+
+    relation voted_prepared(N:node, B:ballot, V:value)
+    relation accepted_prepared(N:node, B:ballot, V:value)
+    relation confirmed_prepared(N:node, B:ballot, V:value)
+    relation voted_committed(N:node, B:ballot, V:value)
+    relation accepted_committed(N:node, B:ballot, V:value)
+    relation confirmed_committed(N:node, B:ballot, V:value)
+    relation nomination_output(N:node, V:value)
+    relation started(N:node, B:ballot)
+    relation left_ballot(N:node, B:ballot)
+
+    # messages received
+    relation received_vote_prepare(N1:node, N2:node, B:ballot, V:value)
+    relation received_accept_prepare(N1:node, N2:node, B:ballot, V:value)
+    relation received_vote_commit(N1:node, N2:node, B:ballot, V:value)
+    relation received_accept_commit(N1:node, N2:node, B:ballot, V:value)
+
+    object actions = { # workaround to avoid `with protocol`, which imports sub-isolates of protocol...
+
+        after init {
+            voted_prepared(N,B,V) := false;
+            accepted_prepared(N,B,V) := false;
+            confirmed_prepared(N,B,V) := false;
+            voted_committed(N,B,V) := false;
+            accepted_committed(N,B,V) := false;
+            confirmed_committed(N,B,V) := false;
+            nomination_output(N,X) := false;
+            left_ballot(N,B) := false;
+            started(N,B) := false;
+            received_vote_prepare(N1,N2,B,V) := false;
+            received_vote_commit(N1,N2,B,V) := false;
+            received_accept_prepare(N1,N2,B,V) := false;
+            received_accept_commit(N1,N2,B,V) := false;
+
+            # TODO: shortcut for now:
+            l2s_d(N:node) := true;
+            l2s_d(B:ballot) := true;
+            l2s_d(V:value) := true;
+        }
+
+        action nomination_update(n:node, v:value) = {
+            nomination_output(n,V) := V = v;
+        }
+
+        action change_ballot(n:node, b:ballot) = {
+            require ~left_ballot(n, b) & ~started(n, b);
+            left_ballot(n,B) := B < b;
+            started(n,b) := true;
+            # now vote prepared:
+            local bmax:ballot, vmax:value {
+                # use the highest confirmed prepared value or, if none exists, the nomination output:
+                require
+                    ((forall B,V . B < b -> ~confirmed_prepared(n,B,V)) & nomination_output(n,vmax))
+                    | (bmax < b & confirmed_prepared(n,bmax,vmax) & (forall B,V . B < b & confirmed_prepared(n,B,V) -> (B <= bmax)));
+                voted_prepared(n, b, vmax) := true; # note we vote to prepare only once per ballot. this may be crucial for liveness as we don't want intact nodes voting to commit different values in the same ballot.
+            };
+
+        }
+
+        # n1 receives a new vote to prepare (b,v); it checks whether quorum threshold is reached and, if so, accepts (b,v) as prepared unless it accepted a different, earlier value as committed.
+        action receive_vote_prepare(na:node, nb:node, b:ballot, v:value) = {
+            require voted_prepared(nb,b,v);
+            received_vote_prepare(na,nb,b,v) := true;
+            if (exists Q . is_quorum(Q) & member(na,Q) &
+                   (forall N . member(N,Q) -> (received_vote_prepare(na,N,b,v) | received_accept_prepare(na,N,b,v)))) &
+               (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) & # not accepted anything contradictory
+               (forall V . ~accepted_prepared(na,b,V)) # do not accept twice
+            {
+                accepted_prepared(na,b,v) := true;
+            };
+        }
+
+
+        action receive_accept_prepare(na:node, nb:node, b:ballot, v:value) = {
+            require accepted_prepared(nb,b,v);
+            received_accept_prepare(na,nb,b,v) := true;
+            if exists Q . is_quorum(Q) & member(na,Q) & forall N . member(N,Q) -> received_accept_prepare(na,N,b,v) {
+                confirmed_prepared(na,b,v) := true; # we must confirm prepared even if we left the ballot because that's used to pick the value to prepare in higher ballots; not doing it would be a liveness issue because, even in a long-enough ballot, nodes would not converge on the same confirmed prepared value.
+                # TODO: in fact, nodes in SCP remember the highest bla bla... and we need to confirm based on this information (see comment at the top of this file)
+                if ~left_ballot(na,b) {
+                    voted_committed(na,b,v) := true;
+                    # NOTE: we do not vote if we left ballot b already. This is important because if anything has already been voted prepared at a higher ballot, then we risk a contradiction; this would violate the invariant stating that votes to commit are not contradicted unless they have been overruled.
+                    # NOTE: we could add note to vote twice, but that does not seem to cause harm
+                };
+            };
+            if ((exists Q . is_quorum(Q) & member(na,Q) & (forall N . member(N,Q) -> (received_vote_prepare(na,N,b,v) | received_accept_prepare(na,N,b,v)))) | (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_prepare(na,N,b,v)))) &
+                   (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) & # not accepted anything contradictory
+                   (forall V . ~accepted_prepared(na,b,V)) # do not accept twice
+            {
+                accepted_prepared(na,b,v) := true;
+            };
+        }
+
+        action receive_vote_commit(na:node, nb:node, b:ballot, v:value) = {
+            require voted_committed(nb,b,v);
+            received_vote_commit(na,nb,b,v) := true;
+            if (exists Q . is_quorum(Q) & member(na,Q) &
+                   (forall N . member(N,Q) -> (received_vote_commit(na,N,b,v) | received_accept_commit(na,N,b,v)))) &
+               (forall B,V . ~(accepted_prepared(na,B,V) & b < B & V ~= v)) & # not accepted anything contradictory
+               (forall V . ~accepted_committed(na,b,V)) & # do not accept commit twice
+               (confirmed_prepared(na,b,v)) # accept committed only if confirmed prepared. NOTE: otherwise befouled nodes have no link with the previous ballots since Byzantine node can make them accept anything.
+            {
+                accepted_committed(na,b,v) := true;
+            };
+        }
+
+        action receive_accept_commit(na:node, nb:node, b:ballot, v:value) = {
+            require accepted_committed(nb,b,v);
+            received_accept_commit(na,nb,b,v) := true;
+            if exists Q . is_quorum(Q) & member(na,Q) & forall N . member(N,Q) -> received_accept_commit(na,N,b,v) {
+                confirmed_committed(na,b,v) := true;
+            };
+            if ((exists Q . is_quorum(Q) & member(na,Q) &
+                    (forall N . member(N,Q) -> (received_vote_commit(na,N,b,v) | received_accept_commit(na,N,b,v)))) |
+                (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_commit(na,N,b,v)))) &
+                (forall B,V . ~(accepted_prepared(na,B,V) & b < B & V ~= v)) & # not accepted anything contradictory
+                (forall V . ~accepted_committed(na,b,V)) & # do not accept twice.
+                (confirmed_prepared(na,b,v)) # accept committed only if confirmed prepared. NOTE: otherwise befouled nodes have no link with the previous ballots since Byzantine node can make them accept anything.
+            {
+                accepted_committed(na,b,v) := true;
+            };
+        }
+
+        action byzantine_step = {
+            voted_prepared(N,B,X) := *;
+            require ~(well_behaved(N) & (voted_prepared(N,B,X) ~= old voted_prepared(N,B,X)));
+            accepted_prepared(N,B,X) := *;
+            require ~(well_behaved(N) & (accepted_prepared(N,B,X) ~= old accepted_prepared(N,B,X)));
+            voted_committed(N,B,X) := *;
+            require ~(well_behaved(N) & (voted_committed(N,B,X) ~= old voted_committed(N,B,X)));
+            accepted_committed(N,B,X) := *;
+            require ~(well_behaved(N) & (accepted_committed(N,B,X) ~= old accepted_committed(N,B,X)));
+            confirmed_prepared(N,B,V) := *;
+            require ~(well_behaved(N) & (confirmed_prepared(N,B,X) ~= old confirmed_prepared(N,B,X)));
+            confirmed_committed(N,B,V) := *;
+            require ~(well_behaved(N) & (confirmed_committed(N,B,X) ~= old confirmed_committed(N,B,X)));
+            nomination_output(N,V) := *;
+            require ~(well_behaved(N) & (nomination_output(N,X) ~= old nomination_output(N,X)));
+            started(N,B) := *;
+            require ~(well_behaved(N) & (started(N,B) ~= old started(N,B)));
+            left_ballot(N,B) := *;
+            require ~(well_behaved(N) & (left_ballot(N,B) ~= old left_ballot(N,B)));
+            received_vote_prepare(N1,N2,B,V) := *;
+            require ~(well_behaved(N1) & (received_vote_prepare(N1,N2,B,V) ~= old received_vote_prepare(N1,N2,B,V)));
+            received_accept_prepare(N1,N2,B,V) := *;
+            require ~(well_behaved(N1) & (received_accept_prepare(N1,N2,B,V) ~= old received_accept_prepare(N1,N2,B,V)));
+            received_vote_commit(N1,N2,B,V) := *;
+            require ~(well_behaved(N1) & (received_vote_commit(N1,N2,B,V) ~= old received_vote_commit(N1,N2,B,V)));
+            received_accept_commit(N1,N2,B,V) := *;
+            require ~(well_behaved(N1) & (received_accept_commit(N1,N2,B,V) ~= old received_accept_commit(N1,N2,B,V)));
+        }
+
+        export receive_vote_prepare
+        export byzantine_step
+        export receive_vote_commit
+        export receive_accept_prepare
+        export receive_accept_commit
+        export change_ballot
+        export nomination_update
+
+    }
+
+    isolate safety = {
+
+        # Here we prove that two intertwined nodes never disagree.
+
+        # the main safety property:
+        invariant [intertwined_safe] intertwined(N1) & intertwined(N2) & confirmed_committed(N1,B1,V1) & confirmed_committed(N2,B2,V2) -> V1 = V2
+
+        private {
+
+            # a well-behaved node does not accept something as committed unless it confirmed it prepared
+            invariant well_behaved(N) & accepted_committed(N,B,V) -> confirmed_prepared(N,B,V)
+
+            # well-behaved nodes do not accept contradictory things:
+            invariant well_behaved(N) & accepted_prepared(N,B2,V2) & (B1 < B2 & V1 ~= V2) -> ~accepted_committed(N,B1,V1)
+
+            # a well-behaved node that confirms something saw a quorum of accepts:
+            invariant (exists N . intertwined(N) & confirmed_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_committed(N,B,V))
+            invariant (exists N . intertwined(N) & confirmed_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intertwined(N) & member(N,Q)) & (forall N . well_behaved(N) & member(N,Q) -> accepted_prepared(N,B,V))
+
+            # messages received from well-behaved nodes are authentic:
+            invariant well_behaved(N) & received_accept_commit(N,N2,B,V) & well_behaved(N2) -> accepted_committed(N2,B,V)
+            invariant well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
+
+            # a well-behaved node does not accept different values as prepared in the same ballot:
+            invariant well_behaved(N) & accepted_prepared(N,B,V1) & accepted_prepared(N,B,V2) -> V1 = V2
+        }
+
+    } with actions, ballot, node_properties, quorum_properties.qi_intertwined
+
+    isolate safety_2 = {
+
+        # Here we prove an additional safety properties which we later use in the liveness proof
+
+        # A value unanimously voted prepared cannot be contradicted. We use this to prove that, in a long-enough ballot in which all intact nodes prepare the same value, all intact nodes confirm that value as committed (because, as per the invariant, its progress cannot be stopped by a contradicting accepted-committed value).
+        # NOTE: this is an interesting property of the protocol, i.e. the outcome becomes univalent as soon as a quorum unanimously prepares a value.
+        invariant [inv1] (forall N . intact(N) -> voted_prepared(N,B,V)) & intact(N) & accepted_committed(N,B2,V2) & B2 < B -> V = V2
+
+        # An accepted prepared value cannot be contradicted. We use this to prove that once an intact nodes confirms (b,v) as prepared, the cascade effect occurs (because (b,v) is never contradicted) and eventually all intact nodes confirm.
+        invariant [inv2] intact(N1) & accepted_prepared(N1,B2,V1) & intact(N2) & B1 <= B2 & accepted_committed(N2,B1,V2) -> V1 = V2
+        # direct consequence:
+        invariant [inv3] intact(N1) & confirmed_prepared(N1,B2,V1) & intact(N2) & B1 <= B2 & accepted_committed(N2,B1,V2) -> V1 = V2
+
+        private {
+            # the two invariants below are the crux of why the main invariants above hold.
+
+            # once a quorum unanimously votes to commit a value, no intact node ever prepares a different value:
+            invariant  is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V)) & B2 > B & V2 ~= V -> forall N . intact(N) & member(N,Q) -> ~voted_prepared(N,B2,V2)
+
+            # important invariant: a node does not prepare a value that contradicts a previous vote to commit unless that vote cannot reach quorum threshold
+            invariant is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & intact(N1) & V1 ~= V2 & voted_prepared(N1,B2,V1) & B1 < B2 -> (~voted_committed(N1,B1,V2) | (exists N . intact(N) & member(N,Q) & left_ballot(N,B1) & ~voted_committed(N,B1,V2)))
+
+            # below, a slew of basic invariants (each is inductive on its own):
+
+            # well-behaved nodes do not accept contradictory things
+            invariant well_behaved(N) & B1 < B2 & V1 ~= V2 & accepted_committed(N,B1,V1) -> ~accepted_prepared(N,B2,V2)
+
+            # a well-behaved node does not accept something as committed unless it confirmed it prepared:
+            invariant well_behaved(N) & voted_committed(N,B,V) -> confirmed_prepared(N,B,V)
+
+            # vote implies started:
+            invariant well_behaved(N) & voted_prepared(N,B,V) -> started(N,B)
+
+            # messages received from well-behaved nodes are authentic:
+            invariant well_behaved(N) & received_accept_commit(N,N2,B,V) & well_behaved(N2) -> accepted_committed(N2,B,V)
+            invariant well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
+            invariant well_behaved(N) & received_vote_commit(N,N2,B,V) & well_behaved(N2) -> voted_committed(N2,B,V)
+            invariant well_behaved(N) & received_vote_prepare(N,N2,B,V) & well_behaved(N2) -> voted_prepared(N2,B,V)
+
+            # an intact node that confirms/accepts something saw a quorum of accepts/votes:
+            invariant (exists N . intact(N) & confirmed_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> accepted_committed(N,B,V))
+            invariant (exists N . intact(N) & accepted_committed(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_committed(N,B,V))
+            invariant (exists N . intact(N) & confirmed_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,B,V))
+            invariant (exists N . intact(N) & accepted_prepared(N,B,V)) -> exists Q . is_quorum(Q) & (exists N . intact(N) & member(N,Q)) & (forall N . intact(N) & member(N,Q) -> voted_prepared(N,B,V))
+
+            # an intact node does not vote/accepts different things in the same ballot:
+            invariant intact(N) & accepted_committed(N,B,V1) & accepted_committed(N,B,V2) -> V1 = V2
+            invariant intact(N) & accepted_prepared(N,B,V1) & accepted_prepared(N,B,V2) -> V1 = V2
+            invariant intact(N) & voted_committed(N,B,V1) & voted_committed(N,B,V2) -> V1 = V2
+            invariant intact(N) & voted_prepared(N,B,V1) & voted_prepared(N,B,V2) -> V1 = V2
+
+            # left_ballot and started:
+            invariant ~(well_behaved(N) & left_ballot(N,B) & B2 < B & ~left_ballot(N,B2))
+            invariant ~(well_behaved(N) & started(N,B) & B0 < B & ~left_ballot(N,B0))
+        }
+
+    } with actions, ballot, node_properties, quorum_properties.qi_intact, quorum_properties.blocking
+
+    # Liveness proofs
+
+    # We would like to prove that if an intact node confirms (b,v) as prepared, then eventually all intact nodes do so.
+    # We carry out the proof in two steps.
+
+    isolate liveness_step_1 = {
+
+        # temporal witnesses:
+        individual b:ballot
+        individual v:value
+        individual n1:node
+        individual n2:node
+
+        isolate additional_safety = {
+            property [cascade] intact(n1) & (exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,b,v))) -> (forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v))))
+            proof {
+                tactic skolemize
+                assume cascade_thm with p(X) = accepted_prepared(X,b,v), q0 = _Q
+            }
+        } with actions, node_properties
+
+        # First we prove that, given the negation of the overall goal, there are two cases: either all intact nodes have accepted (b,v) as prepared, or there exists an intact node which has not but is blocked by a set of intact nodes that has. We use the cascade theorem to establish this property.
+        temporal property (
+            # negation of the ultimate goal:
+            (exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V)))
+            # witnesses n1, n2, b, and v
+            & ( (forall N1,N2,B,V.
+                    intact(N1) & intact(N2) -> globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V)))
+                | ( intact(n1) & intact(n2) & ~globally (confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v)))
+              )
+            ) -> eventually globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
+        proof {
+            tactic l2s with
+            invariant ~(l2s_waiting & l2s_frozen) & ~(l2s_frozen & l2s_saved) & ~(l2s_waiting & l2s_saved)
+            invariant l2s_d(N:node) & l2s_d(B:ballot) & l2s_d(V:value)
+            invariant l2s_frozen -> l2s_a(N:node) & l2s_a(B:ballot) & l2s_a(V:value)
+
+            # negation of the goal:
+            invariant globally ~globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
+            invariant ~globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
+
+            invariant exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))
+            # resulting witnesses:
+            invariant intact(n1) & intact(n2) & ~globally (confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v))
+
+            # at the save point, n1 has confirmed prepared and n2 has not:
+            invariant ($l2s_w . ~(confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v))) | (confirmed_prepared(n1,b,v) & globally ~confirmed_prepared(n2,b,v))
+            invariant (l2s_frozen | l2s_saved) -> confirmed_prepared(n1,b,v) & globally ~confirmed_prepared(n2,b,v)
+            invariant l2s_saved -> $was$ confirmed_prepared(n1,b,v) & ~confirmed_prepared(n2,b,v)
+
+            invariant intact(n1) & confirmed_prepared(n1,b,v) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> received_accept_prepare(n1,N,b,v))
+            invariant well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
+            invariant (l2s_frozen | l2s_saved) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,b,v))
+
+            # NOTE: the two last invariants follow from [additional_safety.cascade], and the fact that [additional_safety.cascade] is a property. It would not work if it was an invariant because we would have to assume it in the post-state too, and we can't use tactics inside l2s
+            invariant (l2s_frozen | l2s_saved) -> ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
+            invariant l2s_saved -> ($l2s_w. ~((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v))))))
+        }
+    } with actions, node_properties
+
+    isolate liveness_step_2 = {
+
+        individual b:ballot
+        individual v:value
+        individual n1:node
+        individual n2:node
+        individual n3:node
+        individual s:nset
+
+        isolate additional_safety = {
+            # TODO: this is provable: if an intact node accepted prepared (b,v), then n3 has not accepted anything contradictory.
+            invariant [inv1] intact(n3) & blocks_slices(s,n3) & (forall N .member(N,s) -> received_accept_prepare(n3,N,b,v)) -> accepted_prepared(n3,b,v)
+
+            invariant [inv2] (forall N. intact(N) -> received_accept_prepare(n2,N,b,v)) -> confirmed_prepared(n2,b,v) 
+
+        } with actions, node_properties, quorum_properties.intact_is_quorum
+
+        temporal property (
+            # fair message delivery:
+            (forall N1,N2,B,V . intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V)))
+            # the property proved in step 1:
+            & ( (exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))) -> (eventually globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | exists N3,S . intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v))))) )
+            # witnesses n1, n2, b, and v
+            & ( (forall N1,N2,B,V.
+                    intact(N1) & intact(N2) -> globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V)))
+                | ( intact(n1) & intact(n2) & ~globally (confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v)))
+              )
+            # witnesses n3 and s
+            & (
+                (eventually globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | exists N3,S .
+                    intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v)))))
+                ->
+                (eventually globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) |
+                    intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v)))))
+               )
+            # conclusion:
+            ) -> forall N1,N2,B,V . intact(N1) & intact(N2) -> globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))
+        proof {
+            tactic l2s with
+            invariant ~(l2s_waiting & l2s_frozen) & ~(l2s_frozen & l2s_saved) & ~(l2s_waiting & l2s_saved)
+            invariant l2s_d(N:node) & l2s_d(B:ballot) & l2s_d(V:value)
+            invariant l2s_frozen -> l2s_a(N:node) & l2s_a(B:ballot) & l2s_a(V:value)
+
+            # fairness of message delivery and consequences:
+            invariant intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V))
+            invariant intact(N1) & intact(N2) -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V) | globally ~received_accept_prepare(N2,N1,B,V)
+            invariant intact(N1) & intact(N2) & accepted_prepared(N1,B,V) -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V)
+
+            # negation of the goal:
+            invariant exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))
+            # resulting witnesses:
+            invariant intact(n1) & intact(n2) & ~globally (confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v))
+
+            # at the save point, n2 has not confirmed prepared and will globally never:
+            invariant ($l2s_w . ~(confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v))) | (confirmed_prepared(n1,b,v) & globally ~confirmed_prepared(n2,b,v))
+            invariant (l2s_frozen | l2s_saved) -> globally ~confirmed_prepared(n2,b,v)
+            #invariant l2s_saved -> $was$ ~confirmed_prepared(n2,b,v)
+
+            # case analysis lemma proved in the first step
+            invariant eventually globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | exists N3,S . intact(N3) & ~accepted_prepared(N3,b,v) & blocks_slices(S,N3) & (forall N . member(N,S) -> (intact(N) & accepted_prepared(N,b,v))))
+            # and the corresponding witnesses:
+            invariant eventually globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))
+
+            # after the freeze point, we get two cases (a) and (b):
+            # case (a) is forall N . intact(N) -> accepted_prepared(N,b,v)
+            # case (b) is intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))
+            invariant ($l2s_w. globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))) | globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))
+            invariant (l2s_frozen | l2s_saved) -> globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) |  intact(n3) & ~accepted_prepared(n3,b,v) & blocks_slices(s,n3) & (forall N . member(N,s) -> (intact(N) & accepted_prepared(N,b,v))))
+
+            # case (a)
+            # [additional_safety.inv2] implies that we wait forever
+            # end case (a)
+
+            # case (b)
+            # [additional_safety.inv1] implies that we wait forever
+            # end case (b)
+        }
+    } with actions, node_properties
+}
