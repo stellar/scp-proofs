@@ -90,10 +90,7 @@ object protocol = {
             received_accept_prepare(N1,N2,B,V) := false;
             received_accept_commit(N1,N2,B,V) := false;
 
-            # TODO: shortcut for now:
-            l2s_d(N:node) := true;
-            l2s_d(B:ballot) := true;
-            l2s_d(V:value) := true;
+            l2s_d(N:node) := intact(N); # we consider a finite set of intact nodes
         }
 
         action nomination_update(n:node, v:value) = {
@@ -249,6 +246,7 @@ object protocol = {
     isolate safety_2 = {
 
         # Here we prove a additional safety properties which we later use in the liveness proof
+        # NOTE: at the moment, most of those are unused
 
         # A value unanimously voted prepared cannot be contradicted. We use this to prove that, in a long-enough ballot in which all intact nodes prepare the same value, all intact nodes confirm that value as committed (because, as per the invariant, its progress cannot be stopped by a contradicting accepted-committed value).
         # NOTE: this is an interesting property of the protocol, i.e. the outcome becomes univalent as soon as a quorum unanimously prepares a value.
@@ -344,8 +342,7 @@ object protocol = {
         proof {
             tactic l2s with
             invariant ~(l2s_waiting & l2s_frozen) & ~(l2s_frozen & l2s_saved) & ~(l2s_waiting & l2s_saved)
-            invariant l2s_d(N:node) & l2s_d(B:ballot) & l2s_d(V:value)
-            invariant l2s_frozen -> l2s_a(N:node) & l2s_a(B:ballot) & l2s_a(V:value)
+            # NOTE: it seems we don't need any information about the footprint. Not sure why... Maybe it's because we only deal with constants in waiting conditions?
 
             # negation of the goal:
             invariant globally ~globally ((forall N . intact(N) -> accepted_prepared(N,b,v)) | (exists N2,S . intact(N2) & ~accepted_prepared(N2,b,v) & blocks_slices(S,N2) & (forall N3 . member(N3,S) -> (intact(N3) & accepted_prepared(N3,b,v)))))
@@ -357,8 +354,7 @@ object protocol = {
 
             # at the save point, n1 has confirmed prepared and n2 has not:
             invariant ($l2s_w . ~(confirmed_prepared(n1,b,v) -> eventually confirmed_prepared(n2,b,v))) | (confirmed_prepared(n1,b,v) & globally ~confirmed_prepared(n2,b,v))
-            invariant (l2s_frozen | l2s_saved) -> confirmed_prepared(n1,b,v) & globally ~confirmed_prepared(n2,b,v)
-            invariant l2s_saved -> $was$ confirmed_prepared(n1,b,v) & ~confirmed_prepared(n2,b,v)
+            invariant (l2s_frozen | l2s_saved) -> confirmed_prepared(n1,b,v)
 
             invariant intact(n1) & confirmed_prepared(n1,b,v) -> exists Q . is_quorum(Q) & member(n1,Q) & (forall N . intact(N) & member(N,Q) -> received_accept_prepare(n1,N,b,v))
             invariant well_behaved(N) & received_accept_prepare(N,N2,B,V) & well_behaved(N2) -> accepted_prepared(N2,B,V)
@@ -410,13 +406,13 @@ object protocol = {
         proof {
             tactic l2s with
             invariant ~(l2s_waiting & l2s_frozen) & ~(l2s_frozen & l2s_saved) & ~(l2s_waiting & l2s_saved)
-            invariant l2s_d(N:node) & l2s_d(B:ballot) & l2s_d(V:value)
-            invariant l2s_frozen -> l2s_a(N:node) & l2s_a(B:ballot) & l2s_a(V:value)
+            invariant (intact(N) -> l2s_d(N:node)) & l2s_d(b) & l2s_d(v)
+            # NOTE: we don't need any information about l2s_a because we don't use the saved state (we prove that we never stop waiting)
 
             # fairness of message delivery and consequences:
             invariant intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V))
-            invariant intact(N1) & intact(N2) -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V) | globally ~received_accept_prepare(N2,N1,B,V)
-            invariant intact(N1) & intact(N2) & accepted_prepared(N1,B,V) -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V)
+            invariant intact(N1) & intact(N2) & B=b & V=v -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V) | globally ~received_accept_prepare(N2,N1,B,V)
+            invariant intact(N1) & intact(N2) & B=b & V=v & accepted_prepared(N1,B,V) -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V)
 
             # negation of the goal:
             invariant exists N1,N2,B,V . intact(N1) & intact(N2) & ~globally (confirmed_prepared(N1,B,V) -> eventually confirmed_prepared(N2,B,V))
