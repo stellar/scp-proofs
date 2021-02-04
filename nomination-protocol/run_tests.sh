@@ -8,6 +8,10 @@ reset=`tput sgr0`
 # to stdout.
 # This shell script simply checks that.
 
+echo "======================================"
+echo "The following cases should all succeed"
+echo "======================================"
+
 for shouldSucceed in tests/succeed/*; do
     if [[ $(./nomination < $shouldSucceed) ]]; then
         echo "${red}$shouldSucceed failed unexpectedly${reset}"
@@ -15,6 +19,10 @@ for shouldSucceed in tests/succeed/*; do
         echo "${green}$shouldSucceed ran as expected${reset}"
     fi
 done
+
+echo "==============================================================="
+echo "The following cases should all fail due to invariant violations"
+echo "==============================================================="
 
 for shouldFail in tests/fail/*; do
     if [[ $(./nomination < $shouldFail) ]]; then

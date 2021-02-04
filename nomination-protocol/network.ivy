@@ -1,14 +1,10 @@
 #lang ivy1.7
 
-# Provide udp-based message-receipt and route messages into nodes.
-include udp
-instance udp_net : udp_simple(id_t, msg_t)
-export udp_net.recv
-
 isolate network =
 {
     relation is_quorum(S:nset)
     relation is_v_blocking(V:id_t, S:nset)
+
 # network_started is important since
 # without this it'd be much more difficult to reason about voting, accepting, confirming.
 # e.g., Checking if there _was_ a quorum when a node confirmed something seems hard.
@@ -19,7 +15,9 @@ isolate network =
         is_quorum(QUORUM) &
         member(NODE, QUORUM) &
         (forall OTHER. member(OTHER, QUORUM)
-         -> ((NODE = OTHER & node.voted(NODE, VALUE)) | node.heard_vote(NODE, OTHER, VALUE) | node.heard_accept(NODE, OTHER, VALUE)))
+         -> ((NODE = OTHER & node.voted(NODE, VALUE)) |
+             node.heard_vote(NODE, OTHER, VALUE) |
+             node.heard_accept(NODE, OTHER, VALUE)))
 
     relation node_accept_condition_2(NODE:id_t, S:nset, VALUE:val_t)
     definition node_accept_condition_2(NODE, S, VALUE) =
@@ -40,19 +38,38 @@ isolate network =
         member(V, S) := false;
         network_started := false;
     }
+
     # Deliver the message "src voted v" to dst.
     action deliver_vote(src:id_t, dst:id_t, v:val_t) =
     {
-        call assume_cascade();
+        call assume_axioms();
+        # The network can choose to deliver a message of src voting v to dst
+        # as long as
+        # 1) src has actually voted v.
+        # 2) dst hasn't received the message.
+        # This allows reordering of messages,
+        # and makes sure that each message only gets sent once.
+        # We never set `heard_vote` to false after setting it to true,
+        # and that makes it impossible for the time to go backwards.
         require node.voted(src, v);
+        require ~node.heard_vote(dst, src, v);
         call node.recv_vote(dst, src, v);
     }
 
     # Deliver the message "src accepted v" to dst.
     action deliver_accept(src:id_t, dst:id_t, v:val_t) =
     {
-        call assume_cascade();
+        call assume_axioms();
+        # The network can choose to deliver a message of src accepting v to dst
+        # as long as
+        # 1) src has actually accepted v.
+        # 2) dst hasn't received the message.
+        # This allows reordering of messages,
+        # and makes sure that each message only gets sent once.
+        # We never set `heard_accept` to false after setting it to true,
+        # and that makes it impossible for the time to go backwards.
         require node.accepted(src, v);
+        require ~node.heard_accept(dst, src, v);
         call node.recv_accept(dst, src, v);
     }
 
@@ -78,13 +95,22 @@ isolate network =
         require ~network_started;
         network_started := true;
     }
-# If every member of a quorum accepts V,
-# then either
-# 1) Every node has accepted V (not just in the quorum), or
-# 2) There exists a node that hasn't accepted V, but its v-blocking set has accepted V, so it's going to accept it soon.
-    action assume_cascade = {
+    action assume_axioms = {
+        # If network_started=true,
+        # quorums and v-blocking sets will no longer change.
         assume network_started;
+
+        # The following axioms are taken from
+        # https://github.com/stellar/scp-proofs/blob/master/README.md#abstractions
+
+        # Axiom 1, 2: Quorum intersection
+        # In this simplified model, every node becomes intact.
+        assume forall Q1, Q2. ((is_quorum(Q1) & is_quorum(Q2)) -> exists V. member(V, Q1) & member(V, Q2));
+
+        # Axiom 3: The set of all nodes must be a quorum.
         assume exists Q. (is_quorum(Q) & forall V. member(V, Q));
+
+        # Axiom 4: Cascade theorem
         assume forall Q, V. is_quorum(Q) & (exists N0 . member(N0,Q)) & (forall N . member(N,Q) -> node.accepted(N, V))
             -> (
                     (forall N1 . node.accepted(N1, V)) |
@@ -92,6 +118,9 @@ isolate network =
                      (forall N3 . member(N3,S) -> node.accepted(N3, V))
                     )
                );
+
+        # Axiom 5: V-blocking sets must be nonempty
+        assume is_v_blocking(V, S) -> exists W. member(W, S)
     }
     private {
         invariant node.voted(SRC, VAL) -> network_started
@@ -105,7 +134,11 @@ isolate network =
         invariant node.heard_vote(SELF, SRC, VAL) -> node.voted(SRC, VAL)
         invariant node.accepted(NODE, VAL) -> (exists OTHER. node.voted(OTHER, VAL))
         invariant node.confirmed(NODE, VAL) -> node.accepted(NODE, VAL)
-        invariant node.confirmed(NODE, VAL) -> exists OTHER. (NODE ~= OTHER & node.accepted(OTHER, VAL))
+        invariant node.confirmed(NODE, VAL) -> 
+            (
+                (forall OTHER. NODE = OTHER) |
+                (exists OTHER. (NODE ~= OTHER & node.accepted(OTHER, VAL)))
+            )
 
         invariant [confirm_backward] (exists QUORUM. node_heard_quorum_accept_value(NODE, QUORUM, VALUE))
             -> node.confirmed(NODE, VALUE)
@@ -116,52 +149,17 @@ isolate network =
 
         invariant [accept_forward] node.accepted(NODE, VALUE)
             -> (exists S. node_accept_condition_1(NODE, S, VALUE) | node_accept_condition_2(NODE, S, VALUE))
-
-        invariant [node_accept_condition_1_forward]
-            node_accept_condition_1(NODE, QUORUM, VALUE) ->
-                is_quorum(QUORUM) &
-                member(NODE, QUORUM) &
-                (forall OTHER. member(OTHER, QUORUM)
-                 -> ((NODE = OTHER & node.voted(NODE, VALUE)) | node.heard_vote(NODE, OTHER, VALUE) | node.heard_accept(NODE, OTHER, VALUE)))
-
-        invariant [node_accept_condition_1_backward]
-                (is_quorum(QUORUM) &
-                member(NODE, QUORUM) &
-                (forall OTHER. member(OTHER, QUORUM)
-                 -> ((NODE = OTHER & node.voted(NODE, VALUE)) | node.heard_vote(NODE, OTHER, VALUE) | node.heard_accept(NODE, OTHER, VALUE))))
-                -> node_accept_condition_1(NODE, QUORUM, VALUE)
-
-        invariant [node_accept_condition_2_forward]
-            node_accept_condition_2(NODE, S, VALUE) ->
-                is_v_blocking(NODE, S) &
-                ~member(NODE, S) &
-                (forall OTHER. member(OTHER, S) -> node.heard_accept(NODE, OTHER, VALUE))
-
-        invariant [node_accept_condition_2_backward]
-            (is_v_blocking(NODE, S) &
-            ~member(NODE, S) &
-            (forall OTHER. member(OTHER, S) -> node.heard_accept(NODE, OTHER, VALUE)))
-                -> node_accept_condition_2(NODE, S, VALUE)
-
-        invariant [node_heard_quorum_accept_value_forward]
-            node_heard_quorum_accept_value(NODE, QUORUM, VALUE) ->
-                is_quorum(QUORUM) &
-                member(NODE, QUORUM) &
-                node.accepted(NODE, VALUE) &
-                (forall OTHER. member(OTHER, QUORUM) -> (NODE = OTHER | node.heard_accept(NODE, OTHER, VALUE)))
-
-        invariant [node_heard_quorum_accept_value_backward]
-            is_quorum(QUORUM) &
-            member(NODE, QUORUM) &
-            node.accepted(NODE, VALUE) &
-            (forall OTHER. member(OTHER, QUORUM) -> (NODE = OTHER | node.heard_accept(NODE, OTHER, VALUE)))
-                -> node_heard_quorum_accept_value(NODE, QUORUM, VALUE)
-        }
-        invariant [eventually_same_candidate_set]
-            (forall SRC, VALUE.
-             (node.voted(SRC, VALUE) -> (forall DST. SRC = DST | node.heard_vote(DST, SRC, VALUE))) &
-             (node.accepted(SRC, VALUE) -> (forall DST. SRC = DST | node.heard_accept(DST, SRC, VALUE))))
+    }
+    # Make sure that after all messages have been delivered, every node confirms the same candidate values.
+    # This is not temporal logic because it doesn't guarantee that all messages will be delivered.
+    # This is the same assumption that the white paper has. (See P.7)
+    # "As is common for asynchronous systems, we assume the network eventually delivers messages between well-behaved nodes, but can otherwise arbitrarily delay or reorder messages."
+    # This property can't be proved yet.
+    invariant [same_candidate_set_after_all_messages_delivered]
+        (forall SRC, VALUE.
+         (node.voted(SRC, VALUE) -> (forall DST. SRC = DST | node.heard_vote(DST, SRC, VALUE))) &
+         (node.accepted(SRC, VALUE) -> (forall DST. SRC = DST | node.heard_accept(DST, SRC, VALUE))))
             -> (forall NODE1, NODE2, VALUE. node.confirmed(NODE1, VALUE) -> node.confirmed(NODE2, VALUE))
 }
-with id_t, udp_net, node, nset
+with id_t, node, nset
 
