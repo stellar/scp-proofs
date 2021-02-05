@@ -1,7 +1,6 @@
 #lang ivy1.7
 
 
-include set
 include order
 
 #instance id_t : iterable
