@@ -3,35 +3,16 @@
 
 include order
 
-#instance id_t : iterable
-
-# id_t is a 1-bit number
 type id_t
-interpret id_t -> bv[1]
 
-# nset is a 2-bit number.
-# This is because we want 2^(# of id_t).
 type nset
-interpret nset -> bv[2]
 
 relation member(X:id_t, S:nset)
-
-
-# node identities are a finite iterable type
 
 # voted-on values are 16-bit values
 type val_t
 interpret val_t -> bv[16]
 
-type msg_kind_t = {msg_vote, msg_accept, msg_confirm}
-
-type msg_t = struct {
-    kind : msg_kind_t,
-    src : id_t,
-    val : val_t
-}
-
-#instance nset : set(id_t)
 include node
 include network
 
@@ -47,5 +28,13 @@ export network.set_is_v_blocking
 export network.set_member
 export network.start_network
 
+# id_t is a 1-bit number.
+# nset is a 2-bit number.
+# This is because we want 2^(# of id_t).
+isolate ext_impl = {
+    interpret id_t -> bv[1]
+    interpret nset -> bv[2]
+}
+
 # Extract a runnable node parameterized by a self-id
-extract runner = node, network, id_t
+extract runner = node, network, id_t, ext_impl
