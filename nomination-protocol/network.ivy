@@ -73,6 +73,8 @@ isolate network =
         call node.recv_accept(dst, src, v);
     }
 
+    # The network can set quorums, v-blocking sets before the network starts.
+    # This is useful for extracted code because we can manually configure the network.
     action set_is_quorum(s:nset, b:bool) =
     {
         require ~network_started;
@@ -90,11 +92,17 @@ isolate network =
         require ~network_started;
         member(v, s) := b;
     }
+
     action start_network =
     {
         require ~network_started;
         network_started := true;
     }
+
+    # This ensures that the quorum & v-blocking set configuration is "sane"
+    # (e.g., the set of all nodes MUST be a quorum by the definition of a quorum)
+    # The axioms here are taken from stellar/scp-proofs.
+    # We always run this when the network delivers messages and nodes start voting.
     action assume_axioms = {
         # If network_started=true,
         # quorums and v-blocking sets will no longer change.
@@ -122,6 +130,11 @@ isolate network =
         # Axiom 5: V-blocking sets must be nonempty
         assume is_v_blocking(V, S) -> exists W. member(W, S)
     }
+
+    # Preliminary invariants.
+    # These are not the properties that we ultimately care about
+    # but telling Ivy about these properties helps Ivy prove things that we care about.
+    # These can be thought of as "lemmas" in mathematics.
     private {
         invariant node.voted(SRC, VAL) -> network_started
         invariant node.accepted(SRC, VAL) -> network_started
@@ -151,10 +164,14 @@ isolate network =
             -> (exists S. node_accept_condition_1(NODE, S, VALUE) | node_accept_condition_2(NODE, S, VALUE))
     }
     # Make sure that after all messages have been delivered, every node confirms the same candidate values.
-    # This is not temporal logic because it doesn't guarantee that all messages will be delivered.
+    # This is NOT temporal logic because it doesn't guarantee that all messages will be delivered.
     # This is the same assumption that the white paper has. (See P.7)
     # "As is common for asynchronous systems, we assume the network eventually delivers messages between well-behaved nodes, but can otherwise arbitrarily delay or reorder messages."
-    # This property can't be proved yet.
+    # Ivy can't prove this property yet.
+    # This is because Ivy seems to think that there is a situation that start with a state that satisfies this property
+    # and transitions into a state that doesn't satisfy this property.
+    # In many cases, the first state in such examples cannot possibly happen.
+    # Therefore, we need to tell Ivy that they can't happen through the private invariants above.
     invariant [same_candidate_set_after_all_messages_delivered]
         (forall SRC, VALUE.
          (node.voted(SRC, VALUE) -> (forall DST. SRC = DST | node.heard_vote(DST, SRC, VALUE))) &
@@ -162,4 +179,3 @@ isolate network =
             -> (forall NODE1, NODE2, VALUE. node.confirmed(NODE1, VALUE) -> node.confirmed(NODE2, VALUE))
 }
 with id_t, node, nset
-
