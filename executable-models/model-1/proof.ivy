@@ -1,0 +1,17 @@
+#lang ivy1.7
+
+include sort
+include node
+include network
+include assertion
+
+invariant [heard_vote_implies_voted] assertion.heard_vote_implies_voted
+invariant [heard_accept_implies_accepted] assertion.heard_accept_implies_accepted
+invariant [accept_condition] assertion.accept_condition
+invariant [confirm_condition] assertion.confirm_condition
+invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_sufficient_messages
+
+# The following invariants are there to ensure that the network we are working with
+# indeed has exactly two nodes.
+invariant [confirm_that_there_are_exactly_two_nodes]
+    (exists A:id_t, B. A ~= B) & (forall A:id_t, B, C. A = B | B = C | C = A)
