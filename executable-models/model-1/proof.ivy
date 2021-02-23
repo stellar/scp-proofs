@@ -15,3 +15,8 @@ invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_
 # indeed has exactly two nodes.
 invariant [confirm_that_there_are_exactly_two_nodes]
     (exists A:id_t, B. A ~= B) & (forall A:id_t, B, C. A = B | B = C | C = A)
+
+export network.deliver_vote
+export network.deliver_accept
+export node.vote
+
