@@ -56,4 +56,4 @@ isolate assertion =
         ensure ~node.confirmed(self_id, val);
     }
 }
-with id_t, node, set_t
+

@@ -98,5 +98,5 @@ isolate node = {
             confirmed(self_id, val) := true;
         };
     }
-} with network, id_t, set_t
+}
 
