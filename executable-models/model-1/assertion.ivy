@@ -12,20 +12,11 @@ isolate assertion =
 
     relation accept_condition
     definition accept_condition =
-        forall SELF, VAL. node.accepted(SELF, VAL) ->
-            (
-                (exists Q. is_quorum(Q) & forall V. member(V, Q) ->
-                            (SELF = V & node.voted(SELF, VAL)) |
-                             node.heard_vote(SELF, V, VAL) |
-                             node.heard_accept(SELF, V, VAL)) |
-                (exists B. is_v_blocking(SELF, B) & forall V. member(V, B) -> node.heard_accept(SELF, V, VAL))
-            )
+        forall SELF, VAL. node.accepted(SELF, VAL) -> node.can_accept(SELF, VAL)
 
     relation confirm_condition
     definition confirm_condition =
-        forall SELF, VAL. node.confirmed(SELF, VAL) ->
-                            (exists Q. is_quorum(Q) & forall V. member(V, Q) ->
-                                        (SELF = V & node.accepted(SELF, VAL)) | node.heard_accept(SELF, V, VAL))
+        forall SELF, VAL. node.confirmed(SELF, VAL) -> node.can_confirm(SELF, VAL)
 
     relation confirm_same_after_sufficient_messages
     definition confirm_same_after_sufficient_messages =
