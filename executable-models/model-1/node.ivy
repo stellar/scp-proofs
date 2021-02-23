@@ -2,6 +2,8 @@
 
 isolate node = {
 
+    # These relations are state variables, and will
+    # be updated during actions below.
     relation voted(SELF:id_t, VAL:val_t)
     relation accepted(SELF:id_t, VAL:val_t)
     relation confirmed(SELF:id_t, VAL:val_t)
@@ -16,6 +18,8 @@ isolate node = {
         heard_accept(SELF, SRC, VAL) := false;
     }
 
+    # The remaining relations are definitions, used as
+    # abbreviations inside logical formulas elsewhere.
     relation heard_set_vote_or_accept(SELF:id_t, SET:set_t, VAL:val_t)
     definition heard_set_vote_or_accept(SELF, S, VAL) =
         forall V. member(V, S) ->
