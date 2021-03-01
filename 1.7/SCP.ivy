@@ -352,8 +352,10 @@ object protocol = {
                 invariant intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V))
                 invariant intact(N1) & intact(N2) & B=_B & V=_V -> ($l2s_w N1,N2,B,V. received_accept_prepare(N2,N1,B,V))(N1,N2,B,V) | received_accept_prepare(N2,N1,B,V) | globally ~received_accept_prepare(N2,N1,B,V)
 
-                # using the negated goal, we derive that we wait for: all intact members of _Q have accepted (_B,_V) as prepared, and, globally, not all intact nodes accept (_B,_V) as prepared:
+                # using the negated goal, we derive that we wait for: (a) all intact members of _Q have accepted (_B,_V) as prepared, and (b), globally, not all intact nodes accept (_B,_V) as prepared:
                 invariant ($l2s_w . ~((forall N . intact(N) & member(N,_Q) -> accepted_prepared(N,_B,_V)) -> eventually (forall N . intact(N) -> accepted_prepared(N,_B,_V)))) | ~((forall N . intact(N) & member(N,_Q) -> accepted_prepared(N,_B,_V)) -> eventually (forall N . intact(N) -> accepted_prepared(N,_B,_V)))
+
+                # Now this can never happen because (a), additional_safety, and the fact that all sent accept_prepare _B,_V messages must be received imply that all intact nodes accepted _B,_V as prepared, which contradicts (b)
 
             }
         }
