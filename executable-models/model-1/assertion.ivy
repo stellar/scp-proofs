@@ -2,6 +2,9 @@
 
 isolate assertion =
 {
+    # These relations are defined here for
+    # 1. Simplicity. check_invariants looks cleaner.
+    # 2. Avoid duplicates. These are used in proof.ivy.
     relation heard_vote_implies_voted
     definition heard_vote_implies_voted =
         forall SELF, OTHER, VAL. node.heard_vote(SELF, OTHER, VAL) -> node.voted(OTHER, VAL)
@@ -23,6 +26,7 @@ isolate assertion =
         forall VAL. (forall NODE1, NODE2. node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
             -> (exists NODE1, NODE2. node.accepted(NODE1, VAL) & ~node.heard_accept(NODE2, NODE1, VAL))
 
+    # check_invariants can be called at any moment and it should always pass.
     action check_invariants =
     {
         ensure heard_vote_implies_voted;
@@ -31,6 +35,10 @@ isolate assertion =
         ensure confirm_condition;
         ensure confirm_same_after_sufficient_messages;
     }
+
+    # The following actions are meant to be used when manual testing.
+    # These are not meant to pass always (e.g., after initialization,
+    # `assert_voted` should not pass.)
     action assert_voted(self_id:id_t, val:val_t) =
     {
         ensure node.voted(self_id, val);
