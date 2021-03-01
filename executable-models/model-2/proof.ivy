@@ -1,0 +1,19 @@
+#lang ivy1.7
+
+include sort
+include node
+include network
+include assertion
+
+# Ivy checks that the following invariants always hold if we start with the initialization state
+# (i.e., `after init`) and continuously apply the exported actions below.
+
+invariant [heard_vote_implies_voted] assertion.heard_vote_implies_voted
+invariant [heard_accept_implies_accepted] assertion.heard_accept_implies_accepted
+invariant [accept_condition] assertion.accept_condition
+invariant [confirm_condition] assertion.confirm_condition
+invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_sufficient_messages
+
+export network.deliver_vote
+export network.deliver_accept
+export node.vote

@@ -1,0 +1,106 @@
+#lang ivy1.7
+
+isolate node = {
+
+    # These relations are state variables, and will
+    # be updated during actions below.
+    relation voted(SELF:id_t, VAL:val_t)
+    relation accepted(SELF:id_t, VAL:val_t)
+    relation confirmed(SELF:id_t, VAL:val_t)
+    relation heard_vote(SELF:id_t, SRC:id_t, VAL:val_t)
+    relation heard_accept(SELF:id_t, SRC:id_t, VAL:val_t)
+
+    after init {
+        voted (SELF, VAL) := false;
+        accepted(SELF, VAL) := false;
+        confirmed(SELF, VAL) := false;
+        heard_vote(SELF, SRC, VAL) := false;
+        heard_accept(SELF, SRC, VAL) := false;
+    }
+
+    # The remaining relations are definitions, used as
+    # abbreviations inside logical formulas elsewhere.
+    relation heard_set_vote_or_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_vote_or_accept(SELF, S, VAL) =
+        forall V. member(V, S) ->
+            (
+                (V = SELF & (voted(SELF, VAL) | accepted(SELF, VAL))) |
+                heard_vote(SELF, V, VAL) |
+                heard_accept(SELF, V, VAL)
+            )
+
+    relation heard_set_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_accept(SELF, S, VAL) =
+        forall V. member(V, S) ->
+        (
+            (V = SELF & accepted(SELF, VAL)) |
+            heard_accept(SELF, V, VAL)
+        )
+
+    relation accept_condition_1(SELF:id_t, VAL:val_t)
+    definition accept_condition_1(SELF, VAL) =
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_vote_or_accept(SELF, Q, VAL)
+            )
+
+    relation accept_condition_2(SELF:id_t, VAL:val_t)
+    definition accept_condition_2(SELF, VAL) =
+        exists S.
+            (
+                is_v_blocking(SELF, S) &
+                heard_set_accept(SELF, S, VAL)
+            )
+
+    relation can_accept(SELF:id_t, VAL:val_t)
+    definition can_accept(SELF, VAL) =
+        accept_condition_1(SELF, VAL) | accept_condition_2(SELF, VAL)
+
+    relation can_confirm(SELF:id_t, VAL:val_t)
+    definition can_confirm(SELF, VAL) =
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_accept(SELF, Q, VAL)
+            )
+
+    after init {
+        voted(SELF, VAL) := false;
+        accepted(SELF, VAL) := false;
+        confirmed(SELF, VAL) := false;
+        heard_vote(SELF, SRC, VAL) := false;
+        heard_accept(SELF, SRC, VAL) := false;
+    }
+
+    action vote(self_id:id_t, v:val_t) =
+    {
+        require ~voted(self_id, v);
+        voted(self_id, v) := true;
+    }
+
+    action recv_vote(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_vote(self_id, src, val) := true;
+        if can_accept(self_id, val) {
+            accepted(self_id, val) := true;
+        };
+        if can_confirm(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+
+    action recv_accept(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_accept(self_id, src, val) := true;
+        if can_accept(self_id, val) {
+            accepted(self_id, val) := true;
+        };
+        if can_confirm(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+}
+

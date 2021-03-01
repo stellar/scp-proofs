@@ -1,0 +1,67 @@
+#lang ivy1.7
+
+isolate assertion =
+{
+    # These relations are defined here for
+    # 1. Simplicity. check_invariants looks cleaner.
+    # 2. Avoid duplicates. These are used in proof.ivy.
+    relation heard_vote_implies_voted
+    definition heard_vote_implies_voted =
+        forall SELF, OTHER, VAL. node.heard_vote(SELF, OTHER, VAL) -> node.voted(OTHER, VAL)
+
+    relation heard_accept_implies_accepted
+    definition heard_accept_implies_accepted =
+        forall SELF, OTHER, VAL. node.heard_accept(SELF, OTHER, VAL) -> node.accepted(OTHER, VAL)
+
+    relation accept_condition
+    definition accept_condition =
+        forall SELF, VAL. node.accepted(SELF, VAL) -> node.can_accept(SELF, VAL)
+
+    relation confirm_condition
+    definition confirm_condition =
+        forall SELF, VAL. node.confirmed(SELF, VAL) -> node.can_confirm(SELF, VAL)
+
+    relation confirm_same_after_sufficient_messages
+    definition confirm_same_after_sufficient_messages =
+        forall VAL. (forall NODE1, NODE2. node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
+            -> (exists NODE1, NODE2. node.accepted(NODE1, VAL) & ~node.heard_accept(NODE2, NODE1, VAL))
+
+    # check_invariants can be called at any moment and it should always pass.
+    action check_invariants =
+    {
+        ensure heard_vote_implies_voted;
+        ensure heard_accept_implies_accepted;
+        ensure accept_condition;
+        ensure confirm_condition;
+        ensure confirm_same_after_sufficient_messages;
+    }
+
+    # The following actions are meant to be used when manual testing.
+    # These are not meant to pass always (e.g., after initialization,
+    # `assert_voted` should not pass.)
+    action assert_voted(self_id:id_t, val:val_t) =
+    {
+        ensure node.voted(self_id, val);
+    }
+    action assert_accepted(self_id:id_t, val:val_t) =
+    {
+        ensure node.accepted(self_id, val);
+    }
+    action assert_confirmed(self_id:id_t, val:val_t) =
+    {
+        ensure node.confirmed(self_id, val);
+    }
+    action assert_not_voted(self_id:id_t, val:val_t) =
+    {
+        ensure ~node.voted(self_id, val);
+    }
+    action assert_not_accepted(self_id:id_t, val:val_t) =
+    {
+        ensure ~node.accepted(self_id, val);
+    }
+    action assert_not_confirmed(self_id:id_t, val:val_t) =
+    {
+        ensure ~node.confirmed(self_id, val);
+    }
+}
+

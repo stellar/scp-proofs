@@ -1,0 +1,21 @@
+#lang ivy1.7
+
+isolate network =
+{
+    # Deliver the message "src voted v" to dst.
+    action deliver_vote(src:id_t, dst:id_t, v:val_t) =
+    {
+        require node.voted(src, v);
+        require ~node.heard_vote(dst, src, v);
+        call node.recv_vote(dst, src, v);
+    }
+
+    # Deliver the message "src accepted v" to dst.
+    action deliver_accept(src:id_t, dst:id_t, v:val_t) =
+    {
+        require node.accepted(src, v);
+        require ~node.heard_accept(dst, src, v);
+        call node.recv_accept(dst, src, v);
+    }
+}
+with id_t, node, set_t
