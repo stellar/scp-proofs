@@ -15,11 +15,20 @@ isolate assertion =
 
     relation accept_condition
     definition accept_condition =
-        forall SELF, VAL. node.accepted(SELF, VAL) -> node.can_accept(SELF, VAL)
+        forall SELF, VAL. node.accepted(SELF, VAL) <-> node.can_accept(SELF, VAL)
 
     relation confirm_condition
     definition confirm_condition =
-        forall SELF, VAL. node.confirmed(SELF, VAL) -> node.can_confirm(SELF, VAL)
+        forall SELF, VAL. node.confirmed(SELF, VAL) <-> node.can_confirm(SELF, VAL)
+
+    relation accept_means_at_least_one_vote
+    definition accept_means_at_least_one_vote =
+        forall SELF, VAL. node.accepted(SELF, VAL) -> (exists NODE. node.voted(NODE, VAL))
+
+
+    relation confirm_that_there_are_exactly_two_nodes
+    definition confirm_that_there_are_exactly_two_nodes =
+        (exists A:id_t, B. A ~= B) & (forall A:id_t, B, C. A = B | B = C | C = A)
 
     relation confirm_same_after_sufficient_messages
     definition confirm_same_after_sufficient_messages =
@@ -33,6 +42,8 @@ isolate assertion =
         ensure heard_accept_implies_accepted;
         ensure accept_condition;
         ensure confirm_condition;
+        ensure accept_means_at_least_one_vote;
+        ensure confirm_that_there_are_exactly_two_nodes;
         ensure confirm_same_after_sufficient_messages;
     }
 
