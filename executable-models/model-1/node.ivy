@@ -1,6 +1,6 @@
 #lang ivy1.7
 
-isolate node = {
+object node = {
 
     # These relations are state variables, and will
     # be updated during actions below.

@@ -1,6 +1,6 @@
 #lang ivy1.7
 
-isolate network =
+object network =
 {
     # Deliver the message "src voted v" to dst.
     action deliver_vote(src:id_t, dst:id_t, v:val_t) =
@@ -18,4 +18,3 @@ isolate network =
         call node.recv_accept(dst, src, v);
     }
 }
-with id_t, node, set_t

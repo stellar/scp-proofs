@@ -12,7 +12,7 @@ relation member(X:id_t, S:set_t)
 relation is_quorum(S:set_t)
 relation is_v_blocking(V:id_t, S:set_t)
 
-isolate sort_initialization =
+object sort_initialization =
 {
     after init {
         # Set i contains node j if and only if (i >> j) & 1.

@@ -1,6 +1,6 @@
 #lang ivy1.7
 
-isolate assertion =
+object assertion =
 {
     # These relations are defined here for
     # 1. Simplicity. check_invariants looks cleaner.
