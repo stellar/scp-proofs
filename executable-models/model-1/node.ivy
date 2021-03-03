@@ -52,17 +52,15 @@ object node = {
                 heard_set_accept(SELF, S, VAL)
             )
 
-    relation can_accept(SELF:id_t, VAL:val_t)
-    definition can_accept(SELF, VAL) =
-        # Must not have accepted anything yet
-        (forall V . ~accepted(SELF, V)) &
+    relation ready_to_accept_but_have_not_accepted(SELF:id_t, VAL:val_t)
+    definition ready_to_accept_but_have_not_accepted(SELF, VAL) =
+        ~accepted(SELF, VAL) &
         (accept_condition_1(SELF, VAL) |
-	 accept_condition_2(SELF, VAL))
+	     accept_condition_2(SELF, VAL))
 
-    relation can_confirm(SELF:id_t, VAL:val_t)
-    definition can_confirm(SELF, VAL) =
-        # Must not have confirmed anything yet
-        (forall V . ~confirmed(SELF, V)) &
+    relation ready_to_confirm_but_have_not_confirmed(SELF:id_t, VAL:val_t)
+    definition ready_to_confirm_but_have_not_confirmed(SELF, VAL) =
+        ~confirmed(SELF, VAL) &
         exists Q.
             (
                 is_quorum(Q) &
@@ -80,8 +78,7 @@ object node = {
 
     action vote(self_id:id_t, v:val_t) =
     {
-        # Must never have voted for _any_ value.
-        require ~voted(self_id, V);
+        require ~voted(self_id, v);
         voted(self_id, v) := true;
         heard_vote(self_id, self_id, v) := true;
     }
@@ -89,11 +86,11 @@ object node = {
     action recv_vote(self_id:id_t, src:id_t, val:val_t) =
     {
         heard_vote(self_id, src, val) := true;
-        if can_accept(self_id, val) {
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
             accepted(self_id, val) := true;
             heard_accept(self_id, self_id, val) := true;
         };
-        if can_confirm(self_id, val) {
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
             confirmed(self_id, val) := true;
         };
     }
@@ -101,11 +98,11 @@ object node = {
     action recv_accept(self_id:id_t, src:id_t, val:val_t) =
     {
         heard_accept(self_id, src, val) := true;
-        if can_accept(self_id, val) {
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
             accepted(self_id, val) := true;
             heard_accept(self_id, self_id, val) := true;
         };
-        if can_confirm(self_id, val) {
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
             confirmed(self_id, val) := true;
         };
     }

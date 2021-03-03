@@ -11,32 +11,41 @@ include assertion
 invariant [heard_vote_implies_voted] assertion.heard_vote_implies_voted
 invariant [heard_accept_implies_accepted] assertion.heard_accept_implies_accepted
 invariant [accept_means_at_least_one_vote] assertion.accept_means_at_least_one_vote
-invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_sufficient_messages
 
 
 # We need a bunch of auxiliary invariants for the prover to avoid spurious CTIs
+invariant [if_node_is_ready_to_accept_it_must_accept]
+    ~forall N, V . node.ready_to_accept_but_have_not_accepted(N, V)
 
-invariant [heard_all_accept_implies_confirmed]
-    forall N1, V. (forall N2. node.heard_accept(N1,N2, V)) -> node.confirmed(N1, V)
+invariant [if_node_is_ready_to_confirm_it_must_confirm]
+    ~forall N, V . node.ready_to_confirm_but_have_not_confirmed(N, V)
 
-invariant [confirmed_implies_all_accepted]
-    forall N, V. (node.confirmed(N,V) -> forall M . node.accepted(M,V))
+invariant [accepted_implies_node_heard_itself_accept]
+    forall N, V. node.accepted(N, V) -> node.heard_accept(N, N, V)
 
-invariant [confirmed_implies_some_heard_accept]
-    forall N, V. node.confirmed(N,V) -> exists N2. node.heard_accept(N,N2,V)
+invariant [voted_implies_node_heard_itself_vote]
+    forall N, V. node.voted(N, V) -> node.heard_vote(N, N, V)
 
-invariant [accept_implies_some_voted]
-    (exists N1, V1 . node.accepted(N1, V1)) -> (exists N2, V2 . node.voted(N2, V2))
+invariant [confirmed_implies_it_heard_at_least_one_node_accept]
+    forall N, V. node.confirmed(N,V) -> exists N2. N ~= N2 & node.heard_accept(N,N2,V)
 
-invariant [no_multi_vote]
-    forall N, V1, V2 . node.voted(N, V1) & node.voted(N, V2) -> V1 = V2
+invariant [accepted_implies_at_least_one_node_voted]
+    forall V. (exists N1. node.accepted(N1, V)) -> (exists N2. node.voted(N2, V))
 
-invariant [no_multi_accept]
-    forall N, V1, V2 . node.accepted(N, V1) & node.accepted(N, V2) -> V1 = V2
-
-invariant [confirm_implies_accepted]
+invariant [confirmed_implies_accepted]
     forall N, V . node.confirmed(N, V) -> node.accepted(N, V)
 
+invariant [confirmed_implies_there_exists_quorum_accepting_value]
+    forall N, V . node.confirmed(N, V) ->
+        (exists Q. is_quorum(Q) & member(N, Q) & node.heard_set_accept(N, Q, V))
+
+invariant [heard_quorum_accept_implies_confirmed]
+    forall N1, V. (exists Q.
+        is_quorum(Q) &
+        member(N1, Q) &
+        forall N2. (member(N2, Q) -> node.heard_accept(N1,N2, V))) -> node.confirmed(N1, V)
+
+invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_sufficient_messages
 
 export network.deliver_vote
 export network.deliver_accept

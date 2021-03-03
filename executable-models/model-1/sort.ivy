@@ -12,7 +12,7 @@ interpret val_t -> bv[1]
 # declarations, though it seems like they should be.
 #
 # Notable: it seems to work without these properties if we pass 'complete=qf'
-# but we .. don't necessariliy always want to do that?
+# but we .. don't necessarily always want to do that?
 
 property [exactly_two_nodes] forall N:id_t. N = 0 | N = 1
 property [exactly_two_values] forall V:val_t. V = 0 | V = 1
