@@ -17,11 +17,6 @@ object assertion =
     definition accept_means_at_least_one_vote =
         forall SELF, VAL. node.accepted(SELF, VAL) -> (exists NODE. node.voted(NODE, VAL))
 
-
-    relation confirm_that_there_are_exactly_two_nodes
-    definition confirm_that_there_are_exactly_two_nodes =
-        (exists A:id_t, B. A ~= B) & (forall A:id_t, B, C. A = B | B = C | C = A)
-
     relation confirm_same_after_sufficient_messages
     definition confirm_same_after_sufficient_messages =
         forall VAL. (exists NODE1, NODE2. node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
@@ -33,7 +28,6 @@ object assertion =
         ensure heard_vote_implies_voted;
         ensure heard_accept_implies_accepted;
         ensure accept_means_at_least_one_vote;
-        ensure confirm_that_there_are_exactly_two_nodes;
         ensure confirm_same_after_sufficient_messages;
     }
 

@@ -11,7 +11,6 @@ include assertion
 invariant [heard_vote_implies_voted] assertion.heard_vote_implies_voted
 invariant [heard_accept_implies_accepted] assertion.heard_accept_implies_accepted
 invariant [accept_means_at_least_one_vote] assertion.accept_means_at_least_one_vote
-invariant [confirm_that_there_are_exactly_two_nodes] assertion.confirm_that_there_are_exactly_two_nodes
 invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_sufficient_messages
 
 export network.deliver_vote
