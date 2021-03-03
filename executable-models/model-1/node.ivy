@@ -24,7 +24,6 @@ object node = {
     definition heard_set_vote_or_accept(SELF, S, VAL) =
         forall V. member(V, S) ->
             (
-                (V = SELF & (voted(SELF, VAL) | accepted(SELF, VAL))) |
                 heard_vote(SELF, V, VAL) |
                 heard_accept(SELF, V, VAL)
             )
@@ -33,7 +32,6 @@ object node = {
     definition heard_set_accept(SELF, S, VAL) =
         forall V. member(V, S) ->
         (
-            (V = SELF & accepted(SELF, VAL)) |
             heard_accept(SELF, V, VAL)
         )
 
@@ -79,6 +77,7 @@ object node = {
     {
         require ~voted(self_id, v);
         voted(self_id, v) := true;
+        heard_vote(self_id, self_id, v) := true;
     }
 
     action recv_vote(self_id:id_t, src:id_t, val:val_t) =
@@ -86,6 +85,7 @@ object node = {
         heard_vote(self_id, src, val) := true;
         if can_accept(self_id, val) {
             accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
         };
         if can_confirm(self_id, val) {
             confirmed(self_id, val) := true;
@@ -97,6 +97,7 @@ object node = {
         heard_accept(self_id, src, val) := true;
         if can_accept(self_id, val) {
             accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
         };
         if can_confirm(self_id, val) {
             confirmed(self_id, val) := true;
