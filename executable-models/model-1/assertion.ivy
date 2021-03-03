@@ -13,14 +13,6 @@ object assertion =
     definition heard_accept_implies_accepted =
         forall SELF, OTHER, VAL. node.heard_accept(SELF, OTHER, VAL) -> node.accepted(OTHER, VAL)
 
-    relation accept_condition
-    definition accept_condition =
-        forall SELF, VAL. node.accepted(SELF, VAL) <-> node.can_accept(SELF, VAL)
-
-    relation confirm_condition
-    definition confirm_condition =
-        forall SELF, VAL. node.confirmed(SELF, VAL) <-> node.can_confirm(SELF, VAL)
-
     relation accept_means_at_least_one_vote
     definition accept_means_at_least_one_vote =
         forall SELF, VAL. node.accepted(SELF, VAL) -> (exists NODE. node.voted(NODE, VAL))
@@ -40,8 +32,6 @@ object assertion =
     {
         ensure heard_vote_implies_voted;
         ensure heard_accept_implies_accepted;
-        ensure accept_condition;
-        ensure confirm_condition;
         ensure accept_means_at_least_one_vote;
         ensure confirm_that_there_are_exactly_two_nodes;
         ensure confirm_same_after_sufficient_messages;
