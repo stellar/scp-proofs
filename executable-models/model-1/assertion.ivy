@@ -53,14 +53,14 @@ object assertion =
     relation confirmed_implies_there_exists_quorum_accepting_value
     definition confirmed_implies_there_exists_quorum_accepting_value =
         forall N, V . node.confirmed(N, V) ->
-            (exists Q. is_quorum(Q) & member(N, Q) & node.heard_set_accept(N, Q, V))
+            (exists Q. node.is_quorum(Q) & node.member(N, Q) & node.heard_set_accept(N, Q, V))
 
     relation heard_quorum_accept_implies_confirmed
     definition heard_quorum_accept_implies_confirmed =
         forall N1, V. (exists Q.
-            is_quorum(Q) &
-            member(N1, Q) &
-            forall N2. (member(N2, Q) -> node.heard_accept(N1,N2, V))) -> node.confirmed(N1, V)
+            node.is_quorum(Q) &
+            node.member(N1, Q) &
+            forall N2. (node.member(N2, Q) -> node.heard_accept(N1,N2, V))) -> node.confirmed(N1, V)
 
     # check_invariants can be called at any moment and it should always pass.
     action check_invariants =

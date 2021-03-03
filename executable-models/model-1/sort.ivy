@@ -17,23 +17,3 @@ interpret val_t -> bv[1]
 property [exactly_two_nodes] forall N:id_t. N = 0 | N = 1
 property [exactly_two_values] forall V:val_t. V = 0 | V = 1
 property [exactly_four_sets] forall S:set_t. S = 0 | S = 1 | S = 2 | S = 3
-
-# For some reason treating the following relation definitions as assignments in
-# an 'after init' block means that Ivy considers the possibility of the
-# relations having different values, when exploring possible prestates for
-# actions, though it seems like it should not.
-
-relation member(X:id_t, S:set_t)
-definition member(X:id_t, S:set_t) =
-  (X=0 & S=1) |
-  (X=1 & S=2) |
-  (X=0 & S=3) |
-  (X=1 & S=3)
-
-relation is_quorum(S:set_t)
-definition is_quorum(S:set_t) = S=3
-
-relation is_v_blocking(V:id_t, S:set_t)
-definition is_v_blocking(V:id_t, S:set_t) =
-  ~((V=0 & S=0) |
-    (V=1 & S=0))

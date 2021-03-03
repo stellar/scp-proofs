@@ -12,4 +12,4 @@ export network.deliver_accept
 export assertion.check_invariants
 
 # Extract a runnable node parameterized by a self-id
-extract fuzz_runner = node, network, id_t, assertion, sort_initialization
+extract fuzz_runner = node, network, id_t, assertion

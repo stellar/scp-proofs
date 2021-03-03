@@ -18,4 +18,4 @@ export assertion.assert_not_accepted
 export assertion.assert_not_confirmed
 
 # Extract a runnable node parameterized by a self-id
-extract executable_runner = node, network, id_t, assertion, sort_initialization
+extract executable_runner = node, network, id_t, assertion
