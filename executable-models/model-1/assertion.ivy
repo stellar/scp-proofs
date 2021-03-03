@@ -2,9 +2,6 @@
 
 object assertion =
 {
-    # These relations are defined here for
-    # 1. Simplicity. check_invariants looks cleaner.
-    # 2. Avoid duplicates. These are used in proof.ivy.
     relation heard_vote_implies_voted
     definition heard_vote_implies_voted =
         forall SELF, OTHER, VAL. node.heard_vote(SELF, OTHER, VAL) -> node.voted(OTHER, VAL)
