@@ -19,12 +19,6 @@ invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_
 invariant [heard_all_accept_implies_confirmed]
     forall N1, V. (forall N2. node.heard_accept(N1,N2, V)) -> node.confirmed(N1, V)
 
-invariant [any_not_heard_accept_implies_not_confirmed]
-    forall N, V. exists N2. ~node.heard_accept(N,N2,V) -> ~node.confirmed(N,V)
-
-invariant [not_local_accepted_implies_not_confirmed]
-    forall N, V. ~node.accepted(N,V) -> ~node.confirmed(N,V)
-
 invariant [confirmed_implies_all_accepted]
     forall N, V. (node.confirmed(N,V) -> forall M . node.accepted(M,V))
 
