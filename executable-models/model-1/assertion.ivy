@@ -22,6 +22,46 @@ object assertion =
         forall VAL. (exists NODE1, NODE2. node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
             -> (exists NODE1, NODE2. node.accepted(NODE1, VAL) & ~node.heard_accept(NODE2, NODE1, VAL))
 
+    relation if_node_is_ready_to_accept_it_must_accept
+    definition if_node_is_ready_to_accept_it_must_accept =
+        ~forall N, V . node.ready_to_accept_but_have_not_accepted(N, V)
+
+    relation if_node_is_ready_to_confirm_it_must_confirm
+    definition if_node_is_ready_to_confirm_it_must_confirm =
+        ~forall N, V . node.ready_to_confirm_but_have_not_confirmed(N, V)
+
+    relation accepted_implies_node_heard_itself_accept
+    definition accepted_implies_node_heard_itself_accept =
+        forall N, V. node.accepted(N, V) -> node.heard_accept(N, N, V)
+
+    relation voted_implies_node_heard_itself_vote
+    definition voted_implies_node_heard_itself_vote =
+        forall N, V. node.voted(N, V) -> node.heard_vote(N, N, V)
+
+    relation confirmed_implies_it_heard_at_least_one_node_accept
+    definition confirmed_implies_it_heard_at_least_one_node_accept =
+        forall N, V. node.confirmed(N,V) -> exists N2. N ~= N2 & node.heard_accept(N,N2,V)
+
+    relation accepted_implies_at_least_one_node_voted
+    definition accepted_implies_at_least_one_node_voted =
+        forall V. (exists N1. node.accepted(N1, V)) -> (exists N2. node.voted(N2, V))
+
+    relation confirmed_implies_accepted
+    definition confirmed_implies_accepted =
+        forall N, V . node.confirmed(N, V) -> node.accepted(N, V)
+
+    relation confirmed_implies_there_exists_quorum_accepting_value
+    definition confirmed_implies_there_exists_quorum_accepting_value =
+        forall N, V . node.confirmed(N, V) ->
+            (exists Q. is_quorum(Q) & member(N, Q) & node.heard_set_accept(N, Q, V))
+
+    relation heard_quorum_accept_implies_confirmed
+    definition heard_quorum_accept_implies_confirmed =
+        forall N1, V. (exists Q.
+            is_quorum(Q) &
+            member(N1, Q) &
+            forall N2. (member(N2, Q) -> node.heard_accept(N1,N2, V))) -> node.confirmed(N1, V)
+
     # check_invariants can be called at any moment and it should always pass.
     action check_invariants =
     {
@@ -29,6 +69,15 @@ object assertion =
         ensure heard_accept_implies_accepted;
         ensure accept_means_at_least_one_vote;
         ensure confirm_same_after_sufficient_messages;
+        ensure if_node_is_ready_to_accept_it_must_accept;
+        ensure if_node_is_ready_to_confirm_it_must_confirm;
+        ensure accepted_implies_node_heard_itself_accept;
+        ensure voted_implies_node_heard_itself_vote;
+        ensure confirmed_implies_it_heard_at_least_one_node_accept;
+        ensure accepted_implies_at_least_one_node_voted;
+        ensure confirmed_implies_accepted;
+        ensure confirmed_implies_there_exists_quorum_accepting_value;
+        ensure heard_quorum_accept_implies_confirmed;
     }
 
     # The following actions are meant to be used when manual testing.
