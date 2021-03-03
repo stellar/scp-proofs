@@ -23,7 +23,12 @@ invariant [confirmed_implies_there_exists_quorum_accepting_value] assertion.conf
 invariant [heard_quorum_accept_implies_confirmed] assertion.heard_quorum_accept_implies_confirmed
 
 # The theorem that we ultimately want to prove.
-invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_sufficient_messages
+# I have no explanation, but the proof is significantly (~40%) faster if we spell out the condition
+# for confirm_same_after_sufficient_messages than using
+# assertion.confirm_same_after_sufficient_messages.
+invariant [confirm_same_after_sufficient_messages]
+        forall VAL. (exists NODE1, NODE2. node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
+            -> (exists NODE1, NODE2. node.accepted(NODE1, VAL) & ~node.heard_accept(NODE2, NODE1, VAL))
 
 export network.deliver_vote
 export network.deliver_accept

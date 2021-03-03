@@ -5,5 +5,6 @@ all: network.ivy node.ivy sort.ivy assertion.ivy executable.ivy
 fuzz: network.ivy node.ivy sort.ivy assertion.ivy fuzz.ivy
 	ivyc target=test isolate=fuzz_runner classname=fuzz fuzz.ivy
 
+# the proof goes much faster with complete=qf
 proof: network.ivy node.ivy sort.ivy assertion.ivy proof.ivy
-	ivy_check trace=true proof.ivy
+	ivy_check complete=qf trace=true proof.ivy
