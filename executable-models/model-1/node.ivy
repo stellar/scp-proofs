@@ -54,10 +54,15 @@ object node = {
 
     relation can_accept(SELF:id_t, VAL:val_t)
     definition can_accept(SELF, VAL) =
-        accept_condition_1(SELF, VAL) | accept_condition_2(SELF, VAL)
+        # Must not have accepted anything yet
+        (forall V . ~accepted(SELF, V)) &
+        (accept_condition_1(SELF, VAL) |
+	 accept_condition_2(SELF, VAL))
 
     relation can_confirm(SELF:id_t, VAL:val_t)
     definition can_confirm(SELF, VAL) =
+        # Must not have confirmed anything yet
+        (forall V . ~confirmed(SELF, V)) &
         exists Q.
             (
                 is_quorum(Q) &
@@ -75,7 +80,8 @@ object node = {
 
     action vote(self_id:id_t, v:val_t) =
     {
-        require ~voted(self_id, v);
+        # Must never have voted for _any_ value.
+        require ~voted(self_id, V);
         voted(self_id, v) := true;
         heard_vote(self_id, self_id, v) := true;
     }
