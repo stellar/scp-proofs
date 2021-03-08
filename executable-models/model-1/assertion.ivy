@@ -2,6 +2,7 @@
 
 object assertion =
 {
+    # TODO: This list is the same as the list in proof.ivy.
     relation heard_vote_implies_voted
     definition heard_vote_implies_voted =
         forall SELF, OTHER, VAL. node.heard_vote(SELF, OTHER, VAL) -> node.voted(OTHER, VAL)
