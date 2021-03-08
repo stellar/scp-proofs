@@ -49,10 +49,7 @@ object node = {
 
     relation heard_set_accept(SELF:id_t, SET:set_t, VAL:val_t)
     definition heard_set_accept(SELF, S, VAL) =
-        forall V. member(V, S) ->
-        (
-            heard_accept(SELF, V, VAL)
-        )
+        forall V. member(V, S) -> heard_accept(SELF, V, VAL)
 
     relation accept_condition_1(SELF:id_t, VAL:val_t)
     definition accept_condition_1(SELF, VAL) =

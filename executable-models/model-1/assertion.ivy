@@ -78,7 +78,7 @@ object assertion =
     }
 
     # The following actions are meant to be used when manual testing.
-    # These are not meant to pass always (e.g., after initialization,
+    # These may not pass in some cases. (e.g., after initialization,
     # `assert_voted` should not pass.)
     action assert_voted(self_id:id_t, val:val_t) =
     {
