@@ -4,9 +4,12 @@ type id_t
 type set_t
 type val_t
 
-interpret id_t -> {v0, v1, v2}
+#interpret id_t -> {v0, v1, v2}
+interpret id_t -> {0..2}
 interpret set_t -> bv[3]
 interpret val_t -> bv[1]
+
+individual v0:id_t, v1:id_t, v2:id_t
 
 # For some reason the following properties aren't implied by the 'interpret'
 # declarations, though it seems like they should be.
