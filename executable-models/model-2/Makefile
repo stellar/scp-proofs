@@ -11,5 +11,5 @@ fuzz: network.ivy node.ivy sort.ivy assertion.ivy fuzz.ivy
 proof: network.ivy node.ivy sort.ivy assertion.ivy proof.ivy
 	ivy_check complete=qf trace=true proof.ivy
 
-format: member.py
-	autopep8 -i member.py
+format: relation.py
+	autopep8 -i relation.py

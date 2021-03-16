@@ -1,5 +1,9 @@
+def cardinality(bitmask):
+    return bin(bitmask).count("1")
+
+
 def isMajority(bitmask, nodeCount):
-    return 2 * bin(bitmask).count("1") > nodeCount
+    return 2 * cardinality(bitmask) > nodeCount
 
 
 def contains(bitmask, node):
@@ -39,13 +43,22 @@ def vBlockingFormat(nodeId, setId):
     return "(X=v{}&S={})".format(nodeId, setId)
 
 
+def vBlocking(nodeId, setId, nodeCount):
+    if contains(setId, nodeId):
+        return True
+    else:
+        cardinalityOfComplement = nodeCount - cardinality(setId)
+        isComplementMajority = 2 * cardinalityOfComplement > nodeCount
+        # If the complement is a majority set, then setId doesn't block nodeId.
+        # Otherwise, setID blocks nodeId.
+        return not isComplementMajority
+
+
 def getNonVBlockingRelations(nodeCount):
     nonVBlockingPairs = []
     for nodeId in range(nodeCount):
         for setId in range(1 << nodeCount):
-            if not contains(setId, nodeId) and not isMajority(setId, nodeCount):
-                # If the set does NOT the node AND the set is NOT the majority,
-                # such a set is NOT v-blocking.
+            if not vBlocking(nodeId, setId, nodeCount):
                 nonVBlockingPairs.append(vBlockingFormat(nodeId, setId))
     return concatRelationPairs(nonVBlockingPairs)
 
