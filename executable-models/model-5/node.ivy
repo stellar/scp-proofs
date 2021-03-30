@@ -1,0 +1,130 @@
+#lang ivy1.7
+
+object node = {
+
+
+    # These relations are state variables, and will
+    # be updated during actions below.
+    relation voted(SELF:id_t, VAL:val_t)
+    relation accepted(SELF:id_t, VAL:val_t)
+    relation confirmed(SELF:id_t, VAL:val_t)
+    relation heard_vote(SELF:id_t, SRC:id_t, VAL:val_t)
+    relation heard_accept(SELF:id_t, SRC:id_t, VAL:val_t)
+
+    # It does not make much sense to talk about
+    # a network containing only one node.
+    axiom exists X:id_t, Y. X ~= Y
+
+    relation member(X:id_t, S:set_t)
+    axiom exists S. forall X. member(X, S)
+
+    relation intersect(S:set_t, T:set_t)
+    definition intersect(S, T) = exists N. member(N, S) & member(N, T)
+
+    relation is_quorum(S:set_t)
+    axiom (is_quorum(S) & is_quorum(T)) -> intersect(S, T)
+    axiom (forall X. member(X, S)) -> is_quorum(S)
+
+    relation is_quorum_of(S:set_t, X:id_t)
+    definition is_quorum_of(S, X) = is_quorum(S) & member(X, S)
+
+    relation is_v_blocking(X:id_t, S:set_t)
+    definition is_v_blocking(X, S) = member(X, S) | forall T. is_quorum(T) -> intersect(T, S)
+    
+    # The remaining relations are definitions, used as
+    # abbreviations inside logical formulas elsewhere.
+    relation heard_set_vote_or_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_vote_or_accept(SELF, S, VAL) =
+        forall V. member(V, S) ->
+            (
+                heard_vote(SELF, V, VAL) |
+                heard_accept(SELF, V, VAL)
+            )
+
+    relation heard_set_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_accept(SELF, S, VAL) =
+        forall V. member(V, S) -> heard_accept(SELF, V, VAL)
+
+    relation accept_condition_1(SELF:id_t, VAL:val_t)
+    definition accept_condition_1(SELF, VAL) =
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_vote_or_accept(SELF, Q, VAL)
+            )
+
+    # The definition allows a v-blocking set that contains v itself
+    # to let v accept a value. However, it would never happen.
+    relation accept_condition_2(SELF:id_t, VAL:val_t)
+    definition accept_condition_2(SELF, VAL) =
+        exists S.
+            (
+                is_v_blocking(SELF, S) &
+                ~member(SELF, S) &
+                heard_set_accept(SELF, S, VAL)
+            )
+
+    relation ready_to_accept_but_have_not_accepted(SELF:id_t, VAL:val_t)
+    definition ready_to_accept_but_have_not_accepted(SELF, VAL) =
+        ~accepted(SELF, VAL) &
+        (accept_condition_1(SELF, VAL) |
+	     accept_condition_2(SELF, VAL))
+
+    relation ready_to_confirm_but_have_not_confirmed(SELF:id_t, VAL:val_t)
+    definition ready_to_confirm_but_have_not_confirmed(SELF, VAL) =
+        ~confirmed(SELF, VAL) &
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_accept(SELF, Q, VAL)
+            )
+
+    after init {
+        voted (SELF, VAL) := false;
+        accepted(SELF, VAL) := false;
+        confirmed(SELF, VAL) := false;
+        heard_vote(SELF, SRC, VAL) := false;
+        heard_accept(SELF, SRC, VAL) := false;
+    }
+
+    action vote(self_id:id_t, val:val_t) =
+    {
+        require ~voted(self_id, val);
+        voted(self_id, val) := true;
+        heard_vote(self_id, self_id, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+
+    action recv_vote(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_vote(self_id, src, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+
+    action recv_accept(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_accept(self_id, src, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+}
+
