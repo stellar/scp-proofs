@@ -1,0 +1,170 @@
+#lang ivy1.7
+
+object node = {
+
+    # These relations are state variables, and will
+    # be updated during actions below.
+    relation voted(SELF:id_t, VAL:val_t)
+    relation accepted(SELF:id_t, VAL:val_t)
+    relation confirmed(SELF:id_t, VAL:val_t)
+    relation heard_vote(SELF:id_t, SRC:id_t, VAL:val_t)
+    relation heard_accept(SELF:id_t, SRC:id_t, VAL:val_t)
+
+    # It does not make much sense to talk about
+    # a network containing only one node.
+    axiom exists X:id_t, Y. X ~= Y
+
+    relation member(X:id_t, S:set_t)
+
+    relation intersect(S:set_t, T:set_t)
+    definition intersect(S, T) = exists N. member(N, S) & member(N, T)
+
+    # Quorum slices are not written in the code, but one should assume that
+    # the set of quorum slices is defined to be
+    # Q(v) = { v ∈ S | |S| > |the complement of S| }.
+    # In other words, a set is a quorum slice if it is a majority set and
+    # it contains the node. This leads to a network where a set is a quorum
+    # if and only if it is a majority set.
+    # Networks with such a quorum configuration always satisfy the following axioms.
+    relation is_quorum(S:set_t)
+    axiom (is_quorum(S) & is_quorum(T)) -> intersect(S, T)
+    axiom exists UNIVERSE. (forall X. member(X, UNIVERSE)) & is_quorum(UNIVERSE)
+
+    # A set B is defined to be v-blocking if and only if B overlaps every one of v's slices.
+    # In this case, we claim the following:
+    #
+    # [Claim] "B is v-blocking if and only if v is in B or whether B overlaps every quorum."
+    #
+    # [Proof]
+    # Suppose that the network contains 2k or 2k + 1 nodes for some k.
+    # Note that in this network a set is a quorum if and only if it contains >= k + 1 elements.
+    #
+    # Let node v and set B be given.
+    # Note that Q(v) = { v ∈ S | |S| >= k + 1 }.
+    #
+    # Suppose that B is v-blocking.
+    # We must show that v ∈ B or B overlaps every quorum.
+    #     * If B contains v, we are done.
+    #     * Suppose B doesn't contain v.
+    #       Since B is v-blocking, it intersects with every one of v's slices.
+    #       Therefore, the complement of B is not a slice.
+    #       Moreover, the complement of B contains v since B doesn't contain v.
+    #       Since the complement of B contains v and is not v's slice, it must contain <= k elements.
+    #       This implies that B contains >= k + 1 elements.
+    #       By the pigeonhole principle, B must intersect with any quorum.
+    #
+    # Suppose v ∈ B or B overlaps every quorum.
+    # We must show that B is v-blocking.
+    #     * If B contains v, then B overlaps with all of v's quorum slices.
+    #       This is because v's quorum slice always contains v.
+    #       Therefore, B is v-blocking.
+    #     * Suppose B doesn't contain v.
+    #         * Then we know that B overlaps every quorum.
+    #             * Since a set is a quorum if and only if it contains >= k + 1 nodes,
+    #               this is possible only if B contains at least k nodes.
+    #             * On the other hand, if B contains fewer than k nodes,
+    #               the complement of B is a quorum.
+    #               That is a contradiction because we assumed B overlaps every quorum.
+    # Therefore, we showed that B is indeed v-blocking.
+    #
+    # Hence, B is v-blocking if and only if B contains v or B overlaps with all quorums.
+    relation is_v_blocking(V:id_t, S:set_t)
+    definition is_v_blocking(V, S) = member(V, S) | forall T. is_quorum(T) -> intersect(T, S)
+
+    # The remaining relations are definitions, used as
+    # abbreviations inside logical formulas elsewhere.
+    relation heard_set_vote_or_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_vote_or_accept(SELF, S, VAL) =
+        forall V. member(V, S) ->
+            (
+                heard_vote(SELF, V, VAL) |
+                heard_accept(SELF, V, VAL)
+            )
+
+    relation heard_set_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_accept(SELF, S, VAL) =
+        forall V. member(V, S) -> heard_accept(SELF, V, VAL)
+
+    relation accept_condition_1(SELF:id_t, VAL:val_t)
+    definition accept_condition_1(SELF, VAL) =
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_vote_or_accept(SELF, Q, VAL)
+            )
+
+    # The definition allows a v-blocking set that contains v itself
+    # to let v accept a value. However, it would never happen.
+    relation accept_condition_2(SELF:id_t, VAL:val_t)
+    definition accept_condition_2(SELF, VAL) =
+        exists S.
+            (
+                is_v_blocking(SELF, S) &
+                ~member(SELF, S) &
+                heard_set_accept(SELF, S, VAL)
+            )
+
+    relation ready_to_accept_but_have_not_accepted(SELF:id_t, VAL:val_t)
+    definition ready_to_accept_but_have_not_accepted(SELF, VAL) =
+        ~accepted(SELF, VAL) &
+        (accept_condition_1(SELF, VAL) |
+	     accept_condition_2(SELF, VAL))
+
+    relation ready_to_confirm_but_have_not_confirmed(SELF:id_t, VAL:val_t)
+    definition ready_to_confirm_but_have_not_confirmed(SELF, VAL) =
+        ~confirmed(SELF, VAL) &
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_accept(SELF, Q, VAL)
+            )
+
+    after init {
+        voted (SELF, VAL) := false;
+        accepted(SELF, VAL) := false;
+        confirmed(SELF, VAL) := false;
+        heard_vote(SELF, SRC, VAL) := false;
+        heard_accept(SELF, SRC, VAL) := false;
+    }
+
+    action vote(self_id:id_t, val:val_t) =
+    {
+        require ~voted(self_id, val);
+        voted(self_id, val) := true;
+        heard_vote(self_id, self_id, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+
+    action recv_vote(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_vote(self_id, src, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+
+    action recv_accept(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_accept(self_id, src, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+}
+
