@@ -31,10 +31,10 @@ private {
         forall SELF, VAL. node.accepted(SELF, VAL) -> (exists NODE. node.voted(NODE, VAL))
 
     invariant [if_node_is_ready_to_accept_it_must_accept]
-        ~forall N, V . node.ready_to_accept_but_have_not_accepted(N, V)
+        forall N, V . ~node.ready_to_accept_but_have_not_accepted(N, V)
 
     invariant [if_node_is_ready_to_confirm_it_must_confirm]
-        ~forall N, V . node.ready_to_confirm_but_have_not_confirmed(N, V)
+        forall N, V . ~node.ready_to_confirm_but_have_not_confirmed(N, V)
 
     invariant [if_accept_condition_1_then_must_accept]
         forall V, VAL. node.accept_condition_1(V, VAL) -> node.accepted(V, VAL)
