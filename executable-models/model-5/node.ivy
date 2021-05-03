@@ -33,7 +33,7 @@ object node = {
     # A set B is defined to be v-blocking if and only if B overlaps every one of v's slices.
     # In this case, we claim the following:
     #
-    # [Claim] "B is v-blocking if and only if v is in B or whether B overlaps every quorum."
+    # [Claim] "B is v-blocking if and only if v is in B or B overlaps every quorum."
     #
     # [Proof]
     # Suppose that the network contains 2k or 2k + 1 nodes for some k.
