@@ -22,11 +22,11 @@ object assertion =
 
     relation if_node_is_ready_to_accept_it_must_accept
     definition if_node_is_ready_to_accept_it_must_accept =
-        ~forall N, V . node.ready_to_accept_but_have_not_accepted(N, V)
+        forall N, V. ~node.ready_to_accept_but_have_not_accepted(N, V)
 
     relation if_node_is_ready_to_confirm_it_must_confirm
     definition if_node_is_ready_to_confirm_it_must_confirm =
-        ~forall N, V . node.ready_to_confirm_but_have_not_confirmed(N, V)
+        forall N, V. ~node.ready_to_confirm_but_have_not_confirmed(N, V)
 
     relation accepted_implies_node_heard_itself_accept
     definition accepted_implies_node_heard_itself_accept =
