@@ -1,0 +1,6 @@
+version: '3'
+services:
+  ivy-check:
+    build: .
+    volumes:
+      - ./:/home/user/scp-proofs:rw
