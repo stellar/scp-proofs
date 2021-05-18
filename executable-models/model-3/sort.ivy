@@ -1,0 +1,19 @@
+#lang ivy1.7
+
+type id_t
+type set_t
+type val_t
+
+interpret id_t -> bv[2]
+interpret set_t -> bv[4]
+interpret val_t -> bv[1]
+
+# For some reason the following properties aren't implied by the 'interpret'
+# declarations, though it seems like they should be.
+#
+# Notable: it seems to work without these properties if we pass 'complete=qf'
+# but we .. don't necessarily always want to do that?
+ 
+property [exactly_four_nodes] forall A:id_t. A = 0 | A = 1 | A = 2 | A = 3
+property [exactly_two_values] forall V:val_t. V = 0 | V = 1
+property [exactly_sixteen_sets] forall S:set_t. S = 0 | S = 1 | S = 2 | S = 3 | S = 4 | S = 5 | S = 6 | S = 7 | S = 8 | S = 9 | S = 10 | S = 11 | S = 12 | S = 13 | S = 14 | S = 15
