@@ -148,19 +148,19 @@ object node = {
     # If S is a v-blocking set for an intact node v, then S must contain an intact node.
     axiom (exists V. intact(V) & is_v_blocking(V, S)) -> (exists V2. member(V2, S) & intact(V2))
 
-    action vote(self_id:id_t, v:val_t) =
+    action vote(self_id:id_t, val:val_t) =
     {
-        require ~voted(self_id, v);
-        voted(self_id, v) := true;
-        heard_vote(self_id, self_id, v) := true;
-        if ready_to_accept_but_have_not_accepted(self_id, v) {
-            accepted(self_id, v) := true;
-            heard_accept(self_id, self_id, v) := true;
+        require ~voted(self_id, val);
+        voted(self_id, val) := true;
+        heard_vote(self_id, self_id, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
         };
-        if ready_to_confirm_but_have_not_confirmed(self_id, v) {
-            confirmed(self_id, v) := true;
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
         };
-        call assume_cascade_theorem(v);
+        call assume_cascade_theorem(val);
     }
 
     action recv_vote(self_id:id_t, src:id_t, val:val_t) =
