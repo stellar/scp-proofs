@@ -3,13 +3,3 @@
 type id_t
 type set_t
 type val_t
-
-
-# TODO:
-# In order to model a network of an arbitrary size,
-# the following interpretation must be removed.
-# However, unfortunately, the proof doesn't terminate
-# without the following interpretation.
-# With the following interpretation, it terminates
-# in less than 30 seconds on my machine.
-interpret id_t -> bv[5]
