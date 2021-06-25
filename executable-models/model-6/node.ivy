@@ -134,15 +134,17 @@ object node = {
     #
     # The second case implies that the one intact node is going to accept it after sufficient messages have been delivered.
     #
-    # You might be wondering why this is an action instead of an axiom.
+    # You might be wondering why this is a relation instead of an axiom.
     # * The cascade theorem uses mutable relations such as accepted.
     #   In Ivy, axioms can't contain mutable relations.
     # * The cascade theorem is a higher-order property that we cannot express in first-order logic.
     #   Instead, we instantiate it only when needed using assume statements in the transition system.
-    action assume_cascade_theorem(val:val_t) = {
-        assume forall Q. quorum_containing_intact_nodes(Q) & every_intact_node_in_this_set_accepted(Q, val)
-            -> (accepted_by_every_intact_node(val) | set_of_intact_nodes_that_accepted_blocks_an_intact_node_that_has_not_accepted(val));
-    }
+    relation cascade_theorem(VAL:val_t)
+    definition cascade_theorem(VAL) = forall Q. quorum_containing_intact_nodes(Q) & every_intact_node_in_this_set_accepted(Q, VAL)
+                                        -> (accepted_by_every_intact_node(VAL) |
+                                            set_of_intact_nodes_that_accepted_blocks_an_intact_node_that_has_not_accepted(VAL))
+
+
 
     # Axiom 5.
     # If S is a v-blocking set for an intact node v, then S must contain an intact node.
@@ -160,7 +162,7 @@ object node = {
         if ready_to_confirm_but_have_not_confirmed(self_id, val) {
             confirmed(self_id, val) := true;
         };
-        call assume_cascade_theorem(val);
+        assume cascade_theorem(val);
     }
 
     action recv_vote(self_id:id_t, src:id_t, val:val_t) =
@@ -173,7 +175,7 @@ object node = {
         if ready_to_confirm_but_have_not_confirmed(self_id, val) {
             confirmed(self_id, val) := true;
         };
-        call assume_cascade_theorem(val);
+        assume cascade_theorem(val);
     }
 
     action recv_accept(self_id:id_t, src:id_t, val:val_t) =
@@ -186,7 +188,7 @@ object node = {
         if ready_to_confirm_but_have_not_confirmed(self_id, val) {
             confirmed(self_id, val) := true;
         };
-        call assume_cascade_theorem(val);
+        assume cascade_theorem(val);
     }
 
     action byzantine_step = {
