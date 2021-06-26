@@ -3,59 +3,58 @@
 object assertion =
 {
     # TODO: This list is the same as the list in proof.ivy.
-    relation heard_vote_implies_voted
-    definition heard_vote_implies_voted =
-        forall SELF, OTHER, VAL. node.heard_vote(SELF, OTHER, VAL) -> node.voted(OTHER, VAL)
+    relation heard_vote_implies_voted(SELF:id_t, OTHER:id_t, VAL:val_t)
+    definition heard_vote_implies_voted(SELF, OTHER, VAL) = node.heard_vote(SELF, OTHER, VAL) -> node.voted(OTHER, VAL)
 
-    relation heard_accept_implies_accepted
-    definition heard_accept_implies_accepted =
-        forall SELF, OTHER, VAL. node.heard_accept(SELF, OTHER, VAL) -> node.accepted(OTHER, VAL)
+    relation heard_accept_implies_accepted(SELF:id_t, OTHER:id_t, VAL:val_t)
+    definition heard_accept_implies_accepted(SELF, OTHER, VAL) =
+        node.heard_accept(SELF, OTHER, VAL) -> node.accepted(OTHER, VAL)
 
-    relation accept_means_at_least_one_vote
-    definition accept_means_at_least_one_vote =
-        forall SELF, VAL. node.accepted(SELF, VAL) -> (exists NODE. node.voted(NODE, VAL))
+    relation accept_means_at_least_one_vote(SELF:id_t, VAL:val_t)
+    definition accept_means_at_least_one_vote(SELF, VAL) =
+        node.accepted(SELF, VAL) -> (exists NODE. node.voted(NODE, VAL))
 
-    relation confirm_same_after_sufficient_messages
-    definition confirm_same_after_sufficient_messages =
-        forall VAL. (exists NODE1, NODE2. node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
+    relation confirm_same_after_sufficient_messages(VAL:val_t)
+    definition confirm_same_after_sufficient_messages(VAL) =
+        (exists NODE1, NODE2. node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
             -> (exists NODE1, NODE2. node.accepted(NODE1, VAL) & ~node.heard_accept(NODE2, NODE1, VAL))
 
-    relation if_node_is_ready_to_accept_it_must_accept
-    definition if_node_is_ready_to_accept_it_must_accept =
-        forall N, V. ~node.ready_to_accept_but_have_not_accepted(N, V)
+    relation if_node_is_ready_to_accept_it_must_accept(N:id_t, V:val_t)
+    definition if_node_is_ready_to_accept_it_must_accept(N, V) =
+        ~node.ready_to_accept_but_have_not_accepted(N, V)
 
-    relation if_node_is_ready_to_confirm_it_must_confirm
-    definition if_node_is_ready_to_confirm_it_must_confirm =
-        forall N, V. ~node.ready_to_confirm_but_have_not_confirmed(N, V)
+    relation if_node_is_ready_to_confirm_it_must_confirm(N:id_t, V:val_t)
+    definition if_node_is_ready_to_confirm_it_must_confirm(N, V) =
+        ~node.ready_to_confirm_but_have_not_confirmed(N, V)
 
-    relation accepted_implies_node_heard_itself_accept
-    definition accepted_implies_node_heard_itself_accept =
-        forall N, V. node.accepted(N, V) -> node.heard_accept(N, N, V)
+    relation accepted_implies_node_heard_itself_accept(N:id_t, V:val_t)
+    definition accepted_implies_node_heard_itself_accept(N, V) =
+        node.accepted(N, V) -> node.heard_accept(N, N, V)
 
-    relation voted_implies_node_heard_itself_vote
-    definition voted_implies_node_heard_itself_vote =
-        forall N, V. node.voted(N, V) -> node.heard_vote(N, N, V)
+    relation voted_implies_node_heard_itself_vote(N:id_t, V:val_t)
+    definition voted_implies_node_heard_itself_vote(N, V) =
+        node.voted(N, V) -> node.heard_vote(N, N, V)
 
-    relation confirmed_implies_it_heard_at_least_one_node_accept
-    definition confirmed_implies_it_heard_at_least_one_node_accept =
-        forall N, V. node.confirmed(N,V) -> exists N2. N ~= N2 & node.heard_accept(N,N2,V)
+    relation confirmed_implies_it_heard_at_least_one_node_accept(N:id_t, V:val_t)
+    definition confirmed_implies_it_heard_at_least_one_node_accept(N, V) =
+        node.confirmed(N,V) -> exists N2. N ~= N2 & node.heard_accept(N,N2,V)
 
-    relation accepted_implies_at_least_one_node_voted
-    definition accepted_implies_at_least_one_node_voted =
-        forall V. (exists N1. node.accepted(N1, V)) -> (exists N2. node.voted(N2, V))
+    relation accepted_implies_at_least_one_node_voted(V:val_t)
+    definition accepted_implies_at_least_one_node_voted(V) =
+        (exists N1. node.accepted(N1, V)) -> (exists N2. node.voted(N2, V))
 
-    relation confirmed_implies_accepted
-    definition confirmed_implies_accepted =
-        forall N, V . node.confirmed(N, V) -> node.accepted(N, V)
+    relation confirmed_implies_accepted(N:id_t, V:val_t)
+    definition confirmed_implies_accepted(N, V) =
+        node.confirmed(N, V) -> node.accepted(N, V)
 
-    relation confirmed_implies_there_exists_quorum_accepting_value
-    definition confirmed_implies_there_exists_quorum_accepting_value =
-        forall N, V . node.confirmed(N, V) ->
+    relation confirmed_implies_there_exists_quorum_accepting_value(N:id_t, V:val_t)
+    definition confirmed_implies_there_exists_quorum_accepting_value(N, V) =
+        node.confirmed(N, V) ->
             (exists Q. node.is_quorum(Q) & node.member(N, Q) & node.heard_set_accept(N, Q, V))
 
-    relation heard_quorum_accept_implies_confirmed
-    definition heard_quorum_accept_implies_confirmed =
-        forall N1, V. (exists Q.
+    relation heard_quorum_accept_implies_confirmed(N1:id_t, V:val_t)
+    definition heard_quorum_accept_implies_confirmed(N1,V) =
+        (exists Q.
             node.is_quorum(Q) &
             node.member(N1, Q) &
             forall N2. (node.member(N2, Q) -> node.heard_accept(N1,N2, V))) -> node.confirmed(N1, V)
@@ -63,19 +62,19 @@ object assertion =
     # check_invariants can be called at any moment and it should always pass.
     action check_invariants =
     {
-        ensure heard_vote_implies_voted;
-        ensure heard_accept_implies_accepted;
-        ensure accept_means_at_least_one_vote;
-        ensure confirm_same_after_sufficient_messages;
-        ensure if_node_is_ready_to_accept_it_must_accept;
-        ensure if_node_is_ready_to_confirm_it_must_confirm;
-        ensure accepted_implies_node_heard_itself_accept;
-        ensure voted_implies_node_heard_itself_vote;
-        ensure confirmed_implies_it_heard_at_least_one_node_accept;
-        ensure accepted_implies_at_least_one_node_voted;
-        ensure confirmed_implies_accepted;
-        ensure confirmed_implies_there_exists_quorum_accepting_value;
-        ensure heard_quorum_accept_implies_confirmed;
+        ensure forall SELF, OTHER, VAL . heard_vote_implies_voted(SELF, OTHER, VAL);
+        ensure forall SELF, OTHER, VAL . heard_accept_implies_accepted(SELF, OTHER, VAL);
+        ensure forall SELF, VAL . accept_means_at_least_one_vote(SELF, VAL);
+        ensure forall VAL . confirm_same_after_sufficient_messages(VAL);
+        ensure forall N, V. if_node_is_ready_to_accept_it_must_accept(N,V);
+        ensure forall N, V. if_node_is_ready_to_confirm_it_must_confirm(N, V);
+        ensure forall N, V. accepted_implies_node_heard_itself_accept(N, V);
+        ensure forall N, V. voted_implies_node_heard_itself_vote(N, V);
+        ensure forall N, V. confirmed_implies_it_heard_at_least_one_node_accept(N, V);
+        ensure forall V . accepted_implies_at_least_one_node_voted(V);
+        ensure forall N, V. confirmed_implies_accepted(N,V);
+        ensure forall N, V. confirmed_implies_there_exists_quorum_accepting_value(N,V);
+        ensure forall N, V. heard_quorum_accept_implies_confirmed(N,V);
     }
 
     # The following actions are meant to be used when manual testing.

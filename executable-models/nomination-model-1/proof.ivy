@@ -10,21 +10,21 @@ include assertion
 
 # We need a bunch of auxiliary invariants for the prover to avoid spurious CTIs
 private {
-    invariant [heard_vote_implies_voted] assertion.heard_vote_implies_voted
-    invariant [heard_accept_implies_accepted] assertion.heard_accept_implies_accepted
-    invariant [accept_means_at_least_one_vote] assertion.accept_means_at_least_one_vote
-    invariant [if_node_is_ready_to_accept_it_must_accept] assertion.if_node_is_ready_to_accept_it_must_accept
-    invariant [if_node_is_ready_to_confirm_it_must_confirm] assertion.if_node_is_ready_to_confirm_it_must_confirm
-    invariant [accepted_implies_node_heard_itself_accept] assertion.accepted_implies_node_heard_itself_accept
-    invariant [voted_implies_node_heard_itself_vote] assertion.voted_implies_node_heard_itself_vote
-    invariant [confirmed_implies_it_heard_at_least_one_node_accept] assertion.confirmed_implies_it_heard_at_least_one_node_accept
-    invariant [accepted_implies_at_least_one_node_voted] assertion.accepted_implies_at_least_one_node_voted
-    invariant [confirmed_implies_accepted] assertion.confirmed_implies_accepted
-    invariant [confirmed_implies_there_exists_quorum_accepting_value] assertion.confirmed_implies_there_exists_quorum_accepting_value
-    invariant [heard_quorum_accept_implies_confirmed] assertion.heard_quorum_accept_implies_confirmed
+    invariant [heard_vote_implies_voted] forall SELF, OTHER, VAL . assertion.heard_vote_implies_voted(SELF, OTHER, VAL)
+    invariant [heard_accept_implies_accepted] forall SELF, OTHER, VAL . assertion.heard_accept_implies_accepted(SELF, OTHER, VAL)
+    invariant [accept_means_at_least_one_vote] forall SELF, VAL . assertion.accept_means_at_least_one_vote(SELF, VAL)
+    invariant [if_node_is_ready_to_accept_it_must_accept] forall N, V . assertion.if_node_is_ready_to_accept_it_must_accept(N, V)
+    invariant [if_node_is_ready_to_confirm_it_must_confirm] forall N, V . assertion.if_node_is_ready_to_confirm_it_must_confirm(N, V)
+    invariant [accepted_implies_node_heard_itself_accept] forall N, V . assertion.accepted_implies_node_heard_itself_accept(N, V)
+    invariant [voted_implies_node_heard_itself_vote] forall N, V . assertion.voted_implies_node_heard_itself_vote(N, V)
+    invariant [confirmed_implies_it_heard_at_least_one_node_accept] forall N, V . assertion.confirmed_implies_it_heard_at_least_one_node_accept(N, V)
+    invariant [accepted_implies_at_least_one_node_voted] forall V . assertion.accepted_implies_at_least_one_node_voted(V)
+    invariant [confirmed_implies_accepted] forall N, V . assertion.confirmed_implies_accepted(N, V)
+    invariant [confirmed_implies_there_exists_quorum_accepting_value] forall N, V . assertion.confirmed_implies_there_exists_quorum_accepting_value(N, V)
+    invariant [heard_quorum_accept_implies_confirmed] forall N, V . assertion.heard_quorum_accept_implies_confirmed(N, V)
 }
 
-invariant [confirm_same_after_sufficient_messages] assertion.confirm_same_after_sufficient_messages
+invariant [confirm_same_after_sufficient_messages] forall V . assertion.confirm_same_after_sufficient_messages(V)
 
 export network.deliver_vote
 export network.deliver_accept
