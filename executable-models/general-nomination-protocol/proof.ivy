@@ -77,3 +77,4 @@ export network.deliver_vote
 export network.deliver_accept
 export node.vote
 export node.byzantine_step
+export node.add_leader
