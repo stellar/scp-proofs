@@ -1,0 +1,145 @@
+#lang ivy1.7
+
+object node = {
+    # For some reason treating the following relation definitions as assignments in
+    # an 'after init' block means that Ivy considers the possibility of the
+    # relations having different values, when exploring possible prestates for
+    # actions, though it seems like it should not.
+
+    relation member(X:id_t, S:set_t)
+    definition member(X:id_t, S:set_t) =
+      (X=0 & S=1) |
+      (X=1 & S=2) |
+      (X=0 & S=3) |
+      (X=1 & S=3)
+
+    relation is_quorum(S:set_t)
+    definition is_quorum(S:set_t) = S=3
+
+    relation is_v_blocking(V:id_t, S:set_t)
+    definition is_v_blocking(V:id_t, S:set_t) =
+      ~((V=0 & S=0) |
+        (V=1 & S=0))
+
+    # These relations are state variables, and will
+    # be updated during actions below.
+    relation voted(SELF:id_t, VAL:val_t)
+    relation accepted(SELF:id_t, VAL:val_t)
+    relation confirmed(SELF:id_t, VAL:val_t)
+    relation heard_vote(SELF:id_t, SRC:id_t, VAL:val_t)
+    relation heard_accept(SELF:id_t, SRC:id_t, VAL:val_t)
+    relation is_leader_of(NODE1:id_t, NODE2:id_t)
+
+    after init {
+        voted (SELF, VAL) := false;
+        accepted(SELF, VAL) := false;
+        confirmed(SELF, VAL) := false;
+        heard_vote(SELF, SRC, VAL) := false;
+        heard_accept(SELF, SRC, VAL) := false;
+        is_leader_of(NODE1, NODE2) := false;
+    }
+
+    # The remaining relations are definitions, used as
+    # abbreviations inside logical formulas elsewhere.
+    relation heard_set_vote_or_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_vote_or_accept(SELF, S, VAL) =
+        forall V. member(V, S) ->
+            (
+                heard_vote(SELF, V, VAL) |
+                heard_accept(SELF, V, VAL)
+            )
+
+    relation heard_set_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_accept(SELF, S, VAL) =
+        forall V. member(V, S) -> heard_accept(SELF, V, VAL)
+
+    relation accept_condition_1(SELF:id_t, VAL:val_t)
+    definition accept_condition_1(SELF, VAL) =
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_vote_or_accept(SELF, Q, VAL)
+            )
+
+    relation accept_condition_2(SELF:id_t, VAL:val_t)
+    definition accept_condition_2(SELF, VAL) =
+        exists S.
+            (
+                is_v_blocking(SELF, S) &
+                heard_set_accept(SELF, S, VAL)
+            )
+
+    relation ready_to_accept_but_have_not_accepted(SELF:id_t, VAL:val_t)
+    definition ready_to_accept_but_have_not_accepted(SELF, VAL) =
+        ~accepted(SELF, VAL) &
+        (accept_condition_1(SELF, VAL) |
+	     accept_condition_2(SELF, VAL))
+
+    relation ready_to_confirm_but_have_not_confirmed(SELF:id_t, VAL:val_t)
+    definition ready_to_confirm_but_have_not_confirmed(SELF, VAL) =
+        ~confirmed(SELF, VAL) &
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_accept(SELF, Q, VAL)
+            )
+
+    relation have_candidate_value(SELF:id_t)
+    definition have_candidate_value(SELF) = exists VAL. confirmed(SELF, VAL)
+
+    relation leader_of_itself(SELF:id_t)
+    definition leader_of_itself(SELF) = is_leader_of(SELF, SELF)
+
+    relation heard_leader_vote(SELF:id_t, VAL:val_t)
+    definition heard_leader_vote(SELF, VAL) = exists LEADER. is_leader_of(LEADER, SELF) & heard_vote(SELF, LEADER, VAL)
+
+    action vote(self_id:id_t, val:val_t) =
+    {
+        require ~voted(self_id, val);
+        require ~have_candidate_value(self_id);
+        require leader_of_itself(self_id) | heard_leader_vote(self_id, val);
+
+        voted(self_id, val) := true;
+        heard_vote(self_id, self_id, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+
+    action recv_vote(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_vote(self_id, src, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+
+    action recv_accept(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_accept(self_id, src, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+    }
+
+    action add_leader(node_1:id_t, node_2:id_t) =
+    {
+        require ~is_leader_of(node_1, node_2);
+        is_leader_of(node_1, node_2) := true;
+    }
+}
+
