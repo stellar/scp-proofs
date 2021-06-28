@@ -69,9 +69,38 @@ private {
         forall N1, V. (node.intact(N1) & (heard_my_quorum_accept(N1, V))) -> node.confirmed(N1, V)
 }
 
+
+# The following two invariants imply:
+#
+# > The set of candidate values will eventually stop growing,
+# > and every node will eventually have the same candidate set.
+#
+# [Proof]
+#
+# If no intact node confirms any value, the statement is vacuously true.
+# Suppose otherwise.
+#
+# [confirm_same_after_sufficient_messages] implies that once an intact node confirms a value,
+# after all acceptance messages about the value get delivered between all intact nodes,
+# they will all confirm that value.
+#
+# Since there are only finitely many acceptance messages for a specific value,
+# the delivery of all such messages will happen in a finite amount of time.
+#
+# Intact nodes do not vote after confirming a candidate value.
+# When all intact nodes confirm at least one value, there must be only finitely many
+# values voted by an intact node. [candidate_value_must_be_voted_by_intact_node]
+# implies that they are the only values they may be confirmed by an intact node later.
+#
+# As it is finite, it will eventually stop growing.
+
 invariant [confirm_same_after_sufficient_messages]
     forall VAL. (exists NODE1, NODE2. node.intact(NODE1) & node.intact(NODE2) & node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
         -> (exists NODE3, NODE4. node.intact(NODE3) & node.intact(NODE4) & node.accepted(NODE3, VAL) & ~node.heard_accept(NODE4, NODE3, VAL))
+
+invariant [candidate_value_must_be_voted_by_intact_node]
+    forall VAL, INTACT. (node.intact(INTACT) & node.confirmed(INTACT, VAL)) -> (exists INTACT2. node.intact(INTACT2) & node.voted(INTACT2, VAL))
+
 
 export network.deliver_vote
 export network.deliver_accept
