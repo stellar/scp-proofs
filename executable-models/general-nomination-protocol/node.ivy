@@ -1,0 +1,231 @@
+#lang ivy1.7
+
+object node = {
+
+    relation member(X:id_t, S:set_t)
+    relation well_behaved(N:id_t)
+    relation intact(N:id_t)
+    relation is_quorum(S:set_t)
+    relation is_v_blocking(V:id_t, S:set_t)
+
+    relation quorum_containing_intact_nodes(Q:set_t)
+    definition quorum_containing_intact_nodes(Q) = exists V. intact(V) & is_quorum(Q) & member(V, Q)
+
+    relation intersect_at_intact_node(Q1:set_t, Q2:set_t)
+    definition intersect_at_intact_node(Q1, Q2) = exists N. intact(N) & member(N, Q1) & member(N, Q2)
+
+    # These relations are state variables, and will
+    # be updated during actions below.
+    relation voted(SELF:id_t, VAL:val_t)
+    relation accepted(SELF:id_t, VAL:val_t)
+    relation confirmed(SELF:id_t, VAL:val_t)
+    relation heard_vote(SELF:id_t, SRC:id_t, VAL:val_t)
+    relation heard_accept(SELF:id_t, SRC:id_t, VAL:val_t)
+    relation is_leader_of(NODE1:id_t, NODE2:id_t)
+
+    after init {
+        voted (SELF, VAL) := false;
+        accepted(SELF, VAL) := false;
+        confirmed(SELF, VAL) := false;
+        heard_vote(SELF, SRC, VAL) := false;
+        heard_accept(SELF, SRC, VAL) := false;
+        is_leader_of(NODE1, NODE2) := false;
+    }
+
+    # The remaining relations are definitions, used as
+    # abbreviations inside logical formulas elsewhere.
+    relation heard_set_vote_or_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_vote_or_accept(SELF, S, VAL) =
+        forall V. member(V, S) ->
+            (
+                heard_vote(SELF, V, VAL) |
+                heard_accept(SELF, V, VAL)
+            )
+
+    relation heard_set_accept(SELF:id_t, SET:set_t, VAL:val_t)
+    definition heard_set_accept(SELF, S, VAL) =
+        forall V. member(V, S) -> heard_accept(SELF, V, VAL)
+
+    relation accept_condition_1(SELF:id_t, VAL:val_t)
+    definition accept_condition_1(SELF, VAL) =
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_vote_or_accept(SELF, Q, VAL)
+            )
+
+    relation accept_condition_2(SELF:id_t, VAL:val_t)
+    definition accept_condition_2(SELF, VAL) =
+        exists S.
+            (
+                is_v_blocking(SELF, S) &
+                # The definition allows a v-blocking set that contains v itself
+                # to let v accept a value. However, it would never happen.
+                ~member(SELF, S) &
+                heard_set_accept(SELF, S, VAL)
+            )
+
+    relation ready_to_accept_but_have_not_accepted(SELF:id_t, VAL:val_t)
+    definition ready_to_accept_but_have_not_accepted(SELF, VAL) =
+        ~accepted(SELF, VAL) &
+        (accept_condition_1(SELF, VAL) |
+	     accept_condition_2(SELF, VAL))
+
+    relation ready_to_confirm_but_have_not_confirmed(SELF:id_t, VAL:val_t)
+    definition ready_to_confirm_but_have_not_confirmed(SELF, VAL) =
+        ~confirmed(SELF, VAL) &
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_accept(SELF, Q, VAL)
+            )
+
+    relation every_intact_node_in_this_set_accepted(SET:set_t, VAL:val_t)
+    definition every_intact_node_in_this_set_accepted(SET, VAL) =
+        forall N. intact(N) & member(N, SET) -> accepted(N, VAL)
+
+    relation accepted_by_every_intact_node(VAL:val_t)
+    definition accepted_by_every_intact_node(VAL) = forall N. intact(N) -> accepted(N, VAL)
+
+    relation only_contains_intact_nodes_that_accepted(SET:set_t, VAL:val_t)
+    definition only_contains_intact_nodes_that_accepted(SET, VAL) =
+        forall N. member(N, SET) -> intact(N) & accepted(N, VAL)
+
+    # Given a value VAL, this relation asks:
+    # Is there a set S such that
+    # - S only contains intact nodes, and
+    # - All nodes in S have accepted VAL, and
+    # - S blocks an intact node that has not accepted VAL?
+    #
+    # This may sound complicated (and maybe not so useful), but this is useful because
+    # this implies that there is an intact node that is ready to accept VAL.
+    # As one might suspect, this is related to liveness.
+    #
+    # One technical note: The following Ivy code says "_a_ set of intact nodes that have accepted VAL"
+    # instead of "_the_ set of intact nodes that have accepted VAL".
+    # However, it's intentional since if _a_ set of intact nodes that have accepted VAL blocks INTACT_NODE,
+    # then _the_ set of intact nodes that have accepted VAL blocks INTACT_NODE as it is a superset.
+    relation set_of_intact_nodes_that_accepted_blocks_an_intact_node_that_has_not_accepted(VAL:val_t)
+    definition set_of_intact_nodes_that_accepted_blocks_an_intact_node_that_has_not_accepted(VAL) =
+                                    (exists INTACT_NODE, S. intact(INTACT_NODE) &
+                                                            ~accepted(INTACT_NODE, VAL) &
+                                                            is_v_blocking(INTACT_NODE, S) &
+                                                            only_contains_intact_nodes_that_accepted(S, VAL))
+
+    # The following are the 5 axioms from README.md:
+
+    # Axiom 1.
+    # intact nodes are well-behaved.
+    axiom intact(N) -> well_behaved(N)
+
+    # Axiom 2.
+    # Two quorums containing intact nodes intersect at an intact node.
+    axiom quorum_containing_intact_nodes(Q1) & quorum_containing_intact_nodes(Q2) -> intersect_at_intact_node(Q1, Q2)
+
+    # Axiom 3.
+    # The set containing all the intact nodes is a quorum, and such a set must exist.
+    axiom exists Q. (forall N. member(N, Q) <-> intact(N)) & is_quorum(Q)
+
+    # Axiom 4.
+    # The cascade theorem.
+    # If Q is a quorum of an intact node and every intact member of Q has accepted val, then one of the following is true:
+    # * All intact nodes have accepted val, _or_
+    # * The set of intact nodes that have accepted val blocks at least one intact node that has not accepted it.
+    #
+    # The second case implies that the one intact node is going to accept it after sufficient messages have been delivered.
+    #
+    # You might be wondering why this is a relation instead of an axiom.
+    # * The cascade theorem uses mutable relations such as accepted.
+    #   In Ivy, axioms can't contain mutable relations.
+    # * The cascade theorem is a higher-order property that we cannot express in first-order logic.
+    #   Instead, we instantiate it only when needed using assume statements in the transition system.
+    relation cascade_theorem(VAL:val_t)
+    definition cascade_theorem(VAL) = forall Q. quorum_containing_intact_nodes(Q) & every_intact_node_in_this_set_accepted(Q, VAL)
+                                        -> (accepted_by_every_intact_node(VAL) |
+                                            set_of_intact_nodes_that_accepted_blocks_an_intact_node_that_has_not_accepted(VAL))
+
+
+
+    # Axiom 5.
+    # If S is a v-blocking set for an intact node v, then S must contain an intact node.
+    axiom (exists V. intact(V) & is_v_blocking(V, S)) -> (exists V2. member(V2, S) & intact(V2))
+
+    relation have_candidate_value(SELF:id_t)
+    definition have_candidate_value(SELF) = exists VAL. confirmed(SELF, VAL)
+
+    relation leader_of_itself(SELF:id_t)
+    definition leader_of_itself(SELF) = is_leader_of(SELF, SELF)
+
+    relation heard_leader_vote(SELF:id_t, VAL:val_t)
+    definition heard_leader_vote(SELF, VAL) = exists LEADER. is_leader_of(LEADER, SELF) & heard_vote(SELF, LEADER, VAL)
+
+    action vote(self_id:id_t, val:val_t) =
+    {
+        require ~voted(self_id, val);
+        require ~have_candidate_value(self_id);
+        require leader_of_itself(self_id) | heard_leader_vote(self_id, val);
+
+        voted(self_id, val) := true;
+        heard_vote(self_id, self_id, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+        assume cascade_theorem(val);
+    }
+
+    action recv_vote(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_vote(self_id, src, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+        assume cascade_theorem(val);
+    }
+
+    action recv_accept(self_id:id_t, src:id_t, val:val_t) =
+    {
+        heard_accept(self_id, src, val) := true;
+        if ready_to_accept_but_have_not_accepted(self_id, val) {
+            accepted(self_id, val) := true;
+            heard_accept(self_id, self_id, val) := true;
+        };
+        if ready_to_confirm_but_have_not_confirmed(self_id, val) {
+            confirmed(self_id, val) := true;
+        };
+        assume cascade_theorem(val);
+    }
+
+    action byzantine_step = {
+        voted(V, X) := *;
+        assume forall V. (well_behaved(V) -> (forall X. voted(V, X) = old voted(V, X)));
+
+        accepted(V, X) := *;
+        assume forall V. (well_behaved(V) -> (forall X. accepted(V, X) = old accepted(V, X)));
+
+        confirmed(V, X) := *;
+        assume forall V. (well_behaved(V) -> (forall X. confirmed(V, X) = old confirmed(V, X)));
+
+        heard_vote(SELF, SRC, VAL) := *;
+        assume forall SELF. (well_behaved(SELF) -> (forall SRC, VAL. heard_vote(SELF, SRC, VAL) = old heard_vote(SELF, SRC, VAL)));
+
+        heard_accept(SELF, SRC, VAL) := *;
+        assume forall SELF. (well_behaved(SELF) -> (forall SRC, VAL. heard_accept(SELF, SRC, VAL) = old heard_accept(SELF, SRC, VAL)));
+    }
+
+    action add_leader(node_1:id_t, node_2:id_t) =
+    {
+        require ~is_leader_of(node_1, node_2);
+        is_leader_of(node_1, node_2) := true;
+    }
+}
+

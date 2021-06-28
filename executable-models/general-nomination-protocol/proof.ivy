@@ -1,0 +1,109 @@
+#lang ivy1.7
+
+include sort
+include node
+include network
+
+# Ivy checks that the following invariants always hold if we start with the initialization state
+# (i.e., `after init`) and continuously apply the exported actions below.
+
+# We need a bunch of auxiliary invariants for the prover to avoid spurious CTIs
+private {
+    invariant [voted_or_not_voted] forall V, VAL. node.voted(V, VAL) | ~node.voted(V, VAL)
+
+    invariant [accepted_or_not_accepted] forall V, VAL. node.accepted(V, VAL) | ~node.accepted(V, VAL)
+
+    invariant [heard_accept_or_not_heard_accept] forall V, W, VAL. node.heard_accept(V, W, VAL) | ~node.heard_accept(V, W, VAL)
+
+    invariant [heard_vote_or_not_heard_vote] forall V, W, VAL. node.heard_vote(V, W, VAL) | ~node.heard_vote(V, W, VAL)
+
+    invariant [voted_implies_heard_itself_vote] forall V, VAL. (node.intact(V) & node.voted(V, VAL)) -> node.heard_vote(V, V, VAL)
+
+    invariant [accepted_implies_heard_itself_accept] forall V, VAL. (node.intact(V) & node.accepted(V, VAL)) -> node.heard_accept(V, V, VAL)
+
+    invariant [heard_vote_implies_voted]
+        forall SELF, OTHER, VAL. (node.intact(SELF) & node.intact(OTHER) & node.heard_vote(SELF, OTHER, VAL)) -> node.voted(OTHER, VAL)
+
+    invariant [heard_accept_implies_accepted]
+        forall SELF, OTHER, VAL. (node.intact(SELF) & node.intact(OTHER) & node.heard_accept(SELF, OTHER, VAL)) -> node.accepted(OTHER, VAL)
+
+    invariant [accept_means_at_least_one_vote]
+        forall SELF, VAL. (node.intact(SELF) & node.accepted(SELF, VAL)) -> (exists NODE. node.intact(NODE) & node.voted(NODE, VAL))
+
+    invariant [if_node_is_ready_to_accept_it_must_accept]
+        forall NODE. (node.intact(NODE) -> forall VAL. ~node.ready_to_accept_but_have_not_accepted(NODE, VAL))
+
+    invariant [if_node_is_ready_to_confirm_it_must_confirm]
+        forall NODE. (node.intact(NODE) -> forall VAL. ~node.ready_to_confirm_but_have_not_confirmed(NODE, VAL))
+
+    invariant [if_accept_condition_1_then_must_accept]
+        forall V, VAL. (node.intact(V) & node.accept_condition_1(V, VAL)) -> node.accepted(V, VAL)
+
+    invariant [if_accept_condition_2_then_must_accept]
+        forall V, VAL. (node.intact(V) & node.accept_condition_2(V, VAL)) -> node.accepted(V, VAL)
+
+    invariant [accepted_implies_node_heard_itself_accept]
+        forall N, V. (node.intact(N) & node.accepted(N, V)) -> node.heard_accept(N, N, V)
+
+    invariant [voted_implies_node_heard_itself_vote]
+        forall N, V. (node.intact(N) & node.voted(N, V)) -> node.heard_vote(N, N, V)
+
+    invariant [accepted_implies_at_least_one_node_voted]
+        forall V. (exists N1. node.intact(N1) & node.accepted(N1, V)) -> (exists N2. node.intact(N2) & node.voted(N2, V))
+
+    invariant [confirmed_implies_accepted]
+        forall N, V. (node.intact(N) & node.confirmed(N, V)) -> node.accepted(N, V)
+
+    relation heard_my_quorum_accept(N:id_t, V:val_t)
+    definition heard_my_quorum_accept(N, V) =
+        exists Q. node.is_quorum(Q) & node.member(N, Q) & node.heard_set_accept(N, Q, V)
+
+    invariant [confirmed_implies_there_exists_quorum_accepting_value]
+        forall N, V . (node.intact(N) & node.confirmed(N, V)) ->
+            heard_my_quorum_accept(N, V)
+
+    invariant [if_there_exists_quorum_accepting_value_then_confirmed]
+        forall N, V. ((node.intact(N) & exists Q. node.is_quorum(Q) & node.member(N, Q) & node.heard_set_accept(N, Q, V)) -> node.confirmed(N, V))
+
+    invariant [heard_quorum_accept_implies_confirmed]
+        forall N1, V. (node.intact(N1) & (heard_my_quorum_accept(N1, V))) -> node.confirmed(N1, V)
+}
+
+
+# The following two invariants imply:
+#
+# > The set of candidate values will eventually stop growing,
+# > and every node will eventually have the same candidate set.
+#
+# [Proof]
+#
+# If no intact node confirms any value, the statement is vacuously true.
+# Suppose otherwise.
+#
+# [confirm_same_after_sufficient_messages] implies that once an intact node confirms a value,
+# after all acceptance messages about the value get delivered between all intact nodes,
+# they will all confirm that value.
+#
+# Since there are only finitely many acceptance messages for a specific value,
+# the delivery of all such messages will happen in a finite amount of time.
+#
+# Intact nodes do not vote after confirming a candidate value.
+# When all intact nodes confirm at least one value, there must be only finitely many
+# values voted by an intact node. [candidate_value_must_be_voted_by_intact_node]
+# implies that they are the only values they may be confirmed by an intact node later.
+#
+# As it is finite, it will eventually stop growing.
+
+invariant [confirm_same_after_sufficient_messages]
+    forall VAL. (exists NODE1, NODE2. node.intact(NODE1) & node.intact(NODE2) & node.confirmed(NODE1, VAL) & ~node.confirmed(NODE2, VAL))
+        -> (exists NODE3, NODE4. node.intact(NODE3) & node.intact(NODE4) & node.accepted(NODE3, VAL) & ~node.heard_accept(NODE4, NODE3, VAL))
+
+invariant [candidate_value_must_be_voted_by_intact_node]
+    forall VAL, INTACT. (node.intact(INTACT) & node.confirmed(INTACT, VAL)) -> (exists INTACT2. node.intact(INTACT2) & node.voted(INTACT2, VAL))
+
+
+export network.deliver_vote
+export network.deliver_accept
+export node.vote
+export node.byzantine_step
+export node.add_leader
