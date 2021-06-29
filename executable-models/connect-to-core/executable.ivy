@@ -1,0 +1,204 @@
+#lang ivy1.7
+
+# We start with a pseudo-object that just exists to inject some decls
+# into the generated header. The `<<< header` quote-tag is necessary.
+object cppdecls = {
+    <<< header
+    #include <memory>
+    #include <vector>
+    #include <exception>
+    #include <mutex>
+    #include <cstdint>
+
+    #include <crypto/Hex.h>
+    #include <crypto/SecretKey.h>
+    #include <crypto/SHA.h>
+    #include <scp/SCP.h>
+    #include <scp/Slot.h>
+    #include <scp/QuorumSetUtils.h>
+    #include <util/Logging.h>
+    #include <util/XDROperators.h>
+    #include <lib/json/json.h>
+
+    namespace stellar {
+        class TestSCP : public SCPDriver {
+
+            // All native methods access SCPs, NodeIDs and QSets by id_t, and we
+            // look them up in these vectors.
+            xdr::xvector<NodeID> mNodeIDs;
+            std::map<Hash, SCPQuorumSetPtr> mQSets;
+            xdr::xvector<SCP> mSCPs;
+
+            void signEnvelope(SCPEnvelope& envelope) override {}
+            SCPQuorumSetPtr getQSet(Hash const& qSetHash) override {
+                if (mQSets.find(qSetHash) == mQSets.end()) {
+                    CLOG_ERROR(SCP, "can't find qset hash {}", hexAbbrev(qSetHash));
+                }
+                return mQSets.at(qSetHash);
+            }
+            void emitEnvelope(SCPEnvelope const& envelope) override {}
+            Hash getHashOf(std::vector<xdr::opaque_vec<>> const& vals) const override {
+                SHA256 hasher;
+                for (auto const& v : vals)
+                {
+                    hasher.add(v);
+                }
+                return hasher.finish();
+            }
+            ValueWrapperPtr combineCandidates(uint64 slotIndex, ValueWrapperPtrSet const& candidates) override { return *candidates.begin(); }
+            void setupTimer(uint64 slotIndex, int timerID, std::chrono::milliseconds timeout, std::function<void()> cb) override {}
+
+            public:
+
+            TestSCP() {
+                Logging::init();
+                Logging::setLoggingColor(true);
+                Logging::setLogLevel(LogLevel::LVL_TRACE, "SCP");
+            }
+
+            void ensure_ids(unsigned n) {
+                if (!mSCPs.empty())
+                {
+                    // Already initialized.
+                    assert(n == mSCPs.size());
+                    return;
+                }
+                while (mNodeIDs.size() < n)
+                {
+                    mNodeIDs.emplace_back(PubKeyUtils::random());
+                }
+                for (auto const& selfID : mNodeIDs)
+                {
+                    xdr::xvector<SCPQuorumSet> innerSets;
+                    auto qset = std::make_shared<SCPQuorumSet>(n/2 + 1, mNodeIDs, innerSets);
+                    normalizeQSet(*qset);
+                    auto hash = xdrSha256(*qset);
+                    mQSets.emplace(hash, qset);
+                    mSCPs.emplace_back(*this, selfID, true, *qset);
+                }
+            }
+
+            SCP& getSCP(unsigned id) {
+                return mSCPs.at(id);
+            }
+
+            NodeID const& getNodeID(unsigned id) {
+                return mNodeIDs.at(id);
+            }
+
+            Hash const& getQSetHash(unsigned id) {
+                return mSCPs.at(id).getLocalNode()->getQuorumSetHash();
+            }
+
+            Slot& getSCPSlot0(unsigned id) {
+                return *getSCP(id).getSlot(0, true);
+            }
+
+            std::string getSCPBallotState(unsigned id) {
+                return getSCPSlot0(id).getBallotProtocol().getJsonInfo()["phase"].asString();
+            }
+
+            unsigned getSCPStatementCount(unsigned id) {
+                return (unsigned)getSCPSlot0(id).getStatementCount();
+            }
+
+            unsigned getNomRound(unsigned id) {
+                return (unsigned)getSCPSlot0(id).getJsonInfo()["nomination"]["roundnumber"].asUInt();
+            }
+        };
+    }
+    static stellar::TestSCP gTestSCP;
+    >>>
+}
+
+type id_t
+type val_t
+type count_t
+type ballotstate = {prepare, confirm, externalize}
+
+module node(self:id_t) = {
+
+    # This receives a nomination _at_ the current node.
+    export action recv_nominate(src:id_t, val:val_t, vote:val_t, accept:val_t) = {
+        <<< impure
+        gTestSCP.ensure_ids(__CARD__id_t);
+        stellar::SCPEnvelope e;
+        auto &s = e.statement;
+        s.nodeID = gTestSCP.getNodeID(src);
+        s.slotIndex = 0;
+        s.pledges.type(stellar::SCP_ST_NOMINATE);
+        auto& nom = s.pledges.nominate();
+        nom.quorumSetHash = gTestSCP.getQSetHash(src);
+        nom.votes.emplace_back(vote.begin(), vote.end());
+        nom.accepted.emplace_back(accept.begin(), accept.end());
+        auto p = std::make_shared<stellar::SCPEnvelopeWrapper>(e);
+        gTestSCP.getSCP(`self`).receiveEnvelope(p);
+        >>>
+    }
+
+    # This initiates a nomination _from_ the current node.
+    export action nominate(val:val_t, prev:val_t) = {
+        <<< impure
+        gTestSCP.ensure_ids(__CARD__id_t);
+        stellar::Value sval(val.begin(), val.end());
+        stellar::Value sprev(prev.begin(), prev.end());
+        auto vwp = std::make_shared<stellar::ValueWrapper>(sval);
+        gTestSCP.getSCP(`self`).nominate(0, vwp, sprev);
+        >>>
+    }
+
+    export action read_ballotstate returns (b:ballotstate) = {
+        <<<
+        gTestSCP.ensure_ids(__CARD__id_t);
+        std::string phase = gTestSCP.getSCPBallotState(`self`);
+        if (phase == "PREPARE")
+        {
+            `b` = `prepare`;
+        }
+        else if (phase == "CONFIRM" || phase == "FINISH")
+        {
+            `b` = `confirm`;
+        }
+        else if (phase == "EXTERNALIZE")
+        {
+            `b` = `externalize`;
+        }
+        >>>
+    }
+
+    export action read_stmtcount returns (n:count_t) = {
+        <<<
+        gTestSCP.ensure_ids(__CARD__id_t);
+        `n` = gTestSCP.getSCPStatementCount(`self`);
+        >>>
+    }
+
+    export action read_nomround returns (n:count_t) = {
+        <<<
+        gTestSCP.ensure_ids(__CARD__id_t);
+        `n` = gTestSCP.getNomRound(`self`);
+        >>>
+    }
+
+    var nstmts : count_t
+    after read_stmtcount {
+        nstmts := n
+    }
+
+    var nomround : count_t
+    after read_nomround {
+        nomround := n
+    }
+
+    var bstate : ballotstate
+    after read_ballotstate {
+        bstate := b
+    }
+
+}
+
+interpret id_t -> bv[1]
+interpret val_t -> strbv[4]
+interpret count_t -> bv[16]
+instantiate nodes(ID:id_t) : node(ID)
+extract executable_runner = cppdecls, nodes
