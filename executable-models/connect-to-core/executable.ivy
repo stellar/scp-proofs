@@ -1,0 +1,153 @@
+#lang ivy1.7
+
+# We start with a pseudo-object that just exists to inject some decls
+# into the generated header. The `<<< header` quote-tag is necessary.
+object cppdecls = {
+    <<< header
+    #include <scp/SCP.h>
+    #include <memory>
+    #include <vector>
+    #include <exception>
+    #include <cstdint>
+
+    class IVYSCPDriver : public stellar::SCPDriver {
+        void signEnvelope(stellar::SCPEnvelope& envelope) override {}
+        stellar::SCPQuorumSetPtr getQSet(stellar::Hash const& qSetHash) override { return nullptr; }
+        void emitEnvelope(stellar::SCPEnvelope const& envelope) override {}
+        stellar::Hash getHashOf(std::vector<xdr::opaque_vec<>> const& vals) const override { return {}; }
+        stellar::ValueWrapperPtr combineCandidates(stellar::uint64 slotIndex, stellar::ValueWrapperPtrSet const& candidates) override { return nullptr; }
+        void setupTimer(stellar::uint64 slotIndex, int timerID, std::chrono::milliseconds timeout, std::function<void()> cb) override {}
+    };
+
+    // In order to keep the domain of discourse finite and practically "searchable", we use
+    // global vectors of SCPs, nodes and qsets.
+    std::vector<stellar::SCP> gSCPs;
+    std::vector<stellar::NodeID> gNodeIDs;
+    std::vector<stellar::SCPQuorumSetPtr> gQSets;
+
+    // Ivy's sorts `scp`, `node` and `qset` will inherit from these types, each of which is just
+    // an index into the global vectors above.
+    struct SCPWrapper { size_t mIdx; };
+    struct NodeWrapper { size_t mIdx; };
+    struct QSetWrapper { size_t mIdx; };
+
+    namespace hash_space {
+        template<>
+        class hash<SCPWrapper> {
+            public:
+            size_t operator()(const SCPWrapper &s) const {
+                hash<int> h;
+                return h((int)s.mIdx);
+            }
+        };
+
+        template<>
+        class hash<NodeWrapper> {
+            public:
+            size_t operator()(const NodeWrapper &n) const {
+                hash<int> h;
+                return h((int)n.mIdx);
+            }
+        };
+
+        template<>
+        class hash<QSetWrapper> {
+            public:
+            size_t operator()(const QSetWrapper &q) const {
+                hash<int> h;
+                return h((int)q.mIdx);
+            }
+        };
+
+    }
+    >>>
+}
+
+type scp
+type node
+type qset
+
+function scp_node(S:scp):node
+export action get_scp_node(s:scp) returns (n:node)
+
+function scp_qset(S:scp):qset
+export action get_scp_qset(s:scp) returns (q:qset)
+
+object impls = {
+
+    implementation {
+
+        interpret scp -> <<< SCPWrapper >>>
+        interpret node -> <<< NodeWrapper >>>
+        interpret qset -> <<< QSetWrapper >>>
+
+        <<< impl
+        executable::node findNode(stellar::NodeID const& n) {
+            using xdr::operator==;
+            executable::node ret{0};
+            while (ret.mIdx < gNodeIDs.size())
+            {
+                if (gNodeIDs[ret.mIdx] == n)
+                {
+                    return ret;
+                }
+                ++ret.mIdx;
+            }
+            throw std::runtime_error("unknown NodeID");
+        }
+
+        executable::qset findQset(stellar::SCPQuorumSet const& q) {
+            executable::qset ret{0};
+            // TODO
+            return ret;
+        }
+        >>>
+
+        definition scp_node(s:scp) = <<< findNode(gSCPs.at(`s`.mIdx).getLocalNodeID()) >>>
+        implement get_scp_node {
+            n := scp_node(s);
+        }
+
+        definition scp_qset(s:scp) = <<< findQset(gSCPs.at(`s`.mIdx).getLocalQuorumSet()) >>>
+        implement get_scp_qset {
+            q := scp_qset(s);
+        }
+
+        <<< encode `scp`
+        std::ostream &operator <<(std::ostream &s, const `scp` &a) {
+            return s << "{scp}";
+        }
+
+        template <>
+        `scp` _arg<`scp`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+            throw std::invalid_argument("Not implemented");
+        }
+        >>>
+
+        <<< encode `node`
+        std::ostream &operator <<(std::ostream &s, const `node` &a) {
+            return s << "{node}";
+        }
+
+        template <>
+        `node` _arg<`node`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+            throw std::invalid_argument("Not implemented");
+        }
+        >>>
+
+        <<< encode `qset`
+        std::ostream &operator <<(std::ostream &s, const `qset` &a) {
+            return s << "{qset}";
+        }
+
+        template <>
+        `qset` _arg<`qset`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+            throw std::invalid_argument("Not implemented");
+        }
+        >>>
+    }
+
+}
+
+
+extract executable_runner = cppdecls, impls
