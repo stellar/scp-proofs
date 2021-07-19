@@ -1,0 +1,58 @@
+#lang ivy1.7
+
+include sort
+include ballot
+include node
+include network
+include assertion
+
+# Ivy checks that the following invariants always hold if we start with the initialization state
+# (i.e., `after init`) and continuously apply the exported actions below.
+
+# We need a bunch of auxiliary invariants for the prover to avoid spurious CTIs
+private {
+    invariant [heard_vote_prepare_implies_voted_prepare] forall SELF, OTHER, VAL . assertion.heard_vote_prepare_implies_voted_prepare(SELF, OTHER, VAL)
+    invariant [heard_accept_prepare_implies_accepted_prepare] forall SELF, OTHER, VAL. assertion.heard_accept_prepare_implies_accepted_prepare(SELF, OTHER, VAL)
+    invariant [accept_prepare_means_at_least_one_vote] forall SELF, VAL . assertion.accept_prepare_means_at_least_one_vote(SELF, VAL)
+    invariant [if_node_is_ready_to_accept_prepare_it_must_accept_prepare] forall N, V . assertion.if_node_is_ready_to_accept_prepare_it_must_accept_prepare(N, V)
+    invariant [if_node_is_ready_to_confirm_prepare_it_must_confirm_prepare] forall N, V . assertion.if_node_is_ready_to_confirm_prepare_it_must_confirm_prepare(N, V)
+    invariant [accepted_prepare_implies_node_heard_itself_accept_prepare] forall N, V . assertion.accepted_prepare_implies_node_heard_itself_accept_prepare(N, V)
+    invariant [voted_prepare_implies_node_heard_itself_vote_prepare] forall N, V . assertion.voted_prepare_implies_node_heard_itself_vote_prepare(N, V)
+    invariant [confirmed_prepare_implies_it_heard_at_least_one_node_accept_prepare] forall N, V . assertion.confirmed_prepare_implies_it_heard_at_least_one_node_accept_prepare(N, V)
+    invariant [accepted_prepare_implies_at_least_one_node_voted_prepare] forall V . assertion.accepted_prepare_implies_at_least_one_node_voted_prepare(V)
+    invariant [confirmed_prepare_implies_accepted_prepare] forall N, V . assertion.confirmed_prepare_implies_accepted_prepare(N, V)
+    invariant [confirmed_prepare_implies_there_exists_quorum_accepting_value] forall N, V . assertion.confirmed_prepare_implies_there_exists_quorum_accepting_value(N, V)
+    invariant [heard_quorum_accept_prepare_implies_confirmed_prepare] forall N, V . assertion.heard_quorum_accept_prepare_implies_confirmed_prepare(N, V)
+
+    invariant [heard_vote_commit_implies_voted_commit] forall SELF, OTHER, VAL . assertion.heard_vote_commit_implies_voted_commit(SELF, OTHER, VAL)
+    invariant [heard_accept_commit_implies_accepted_commit] forall SELF, OTHER, VAL. assertion.heard_accept_commit_implies_accepted_commit(SELF, OTHER, VAL)
+    invariant [accept_commit_means_at_least_one_vote] forall SELF, VAL . assertion.accept_commit_means_at_least_one_vote(SELF, VAL)
+    invariant [if_node_is_ready_to_accept_commit_it_must_accept_commit] forall N, V . assertion.if_node_is_ready_to_accept_commit_it_must_accept_commit(N, V)
+    invariant [if_node_is_ready_to_confirm_commit_it_must_confirm_commit] forall N, V . assertion.if_node_is_ready_to_confirm_commit_it_must_confirm_commit(N, V)
+    invariant [accepted_commit_implies_node_heard_itself_accept_commit] forall N, V . assertion.accepted_commit_implies_node_heard_itself_accept_commit(N, V)
+    invariant [voted_commit_implies_node_heard_itself_vote_commit] forall N, V . assertion.voted_commit_implies_node_heard_itself_vote_commit(N, V)
+    invariant [confirmed_commit_implies_it_heard_at_least_one_node_accept_commit] forall N, V . assertion.confirmed_commit_implies_it_heard_at_least_one_node_accept_commit(N, V)
+    invariant [accepted_commit_implies_at_least_one_node_voted_commit] forall V . assertion.accepted_commit_implies_at_least_one_node_voted_commit(V)
+    invariant [confirmed_commit_implies_accepted_commit] forall N, V . assertion.confirmed_commit_implies_accepted_commit(N, V)
+    invariant [confirmed_commit_implies_there_exists_quorum_accepting_value] forall N, V . assertion.confirmed_commit_implies_there_exists_quorum_accepting_value(N, V)
+    invariant [heard_quorum_accept_commit_implies_confirmed_commit] forall N, V . assertion.heard_quorum_accept_commit_implies_confirmed_commit(N, V)
+    invariant [voted_commit_implies_confirmed_prepare] forall NODE, BAL. node.voted_commit(NODE, BAL) -> node.confirmed_prepare(NODE, BAL)
+    invariant [accepted_commit_implies_confirmed_prepare] forall NODE, BAL. node.accepted_commit(NODE, BAL) -> node.confirmed_prepare(NODE, BAL)
+    invariant [confirmed_commit_implies_confirmed_prepare] forall NODE, BAL. node.confirmed_commit(NODE, BAL) -> node.confirmed_prepare(NODE, BAL)
+    invariant [voted_commit_implies_never_voted_abort] forall NODE, BAL. node.voted_commit(NODE, BAL) -> ~node.voted_abort(NODE, BAL)
+    invariant [accepted_commit_implies_never_accepted_abort] forall NODE, BAL. node.accepted_commit(NODE, BAL) -> ~node.accepted_abort(NODE, BAL)
+    invariant [confirmed_commit_implies_never_accepted_abort] forall NODE, BAL. node.confirmed_commit(NODE, BAL) -> ~node.accepted_abort(NODE, BAL)
+    invariant [accepted_commit_implies_accept_commit_condition_1_or_2] forall NODE, BAL. assertion.accepted_commit_implies_accept_commit_condition_1_or_2(NODE, BAL)
+}
+
+invariant [confirm_prepare_same_after_sufficient_messages] forall V . assertion.confirm_prepare_same_after_sufficient_messages(V)
+# TODO: Add the invariant to assertion.ivy
+invariant [confirm_commit_only_same_values] forall NODE1, NODE2, BAL1, BAL2. (node.confirmed_commit(NODE1, BAL1) & node.confirmed_commit(NODE2, BAL2)) -> (x(BAL1) = x(BAL2))
+
+export network.deliver_vote_prepare
+export network.deliver_accept_prepare
+export node.vote_prepare
+export network.deliver_vote_commit
+export network.deliver_accept_commit
+export node.vote_commit
+export node.confirm_nominate
