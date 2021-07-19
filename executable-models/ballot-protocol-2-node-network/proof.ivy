@@ -1,0 +1,57 @@
+#lang ivy1.7
+
+include sort
+include node
+include network
+include assertion
+
+# Ivy checks that the following invariants always hold if we start with the initialization state
+# (i.e., `after init`) and continuously apply the exported actions below.
+
+# We need a bunch of auxiliary invariants for the prover to avoid spurious CTIs
+private {
+    invariant assertion.heard_vote_prepare_implies_voted_prepare(SELF, OTHER, BAL)
+    invariant assertion.heard_accept_prepare_implies_accepted_prepare(SELF, OTHER, BAL)
+    invariant assertion.accept_prepare_means_at_least_one_vote(NODE, BAL)
+    invariant assertion.if_node_is_ready_to_accept_prepare_it_must_accept_prepare(NODE, BAL)
+    invariant assertion.if_node_is_ready_to_confirm_prepare_it_must_confirm_prepare(NODE, BAL)
+    invariant assertion.accepted_prepare_implies_node_heard_itself_accept_prepare(NODE, BAL)
+    invariant assertion.voted_prepare_implies_node_heard_itself_vote_prepare(NODE, BAL)
+    invariant assertion.confirmed_prepare_implies_it_heard_at_least_one_node_accept_prepare(NODE, BAL)
+    invariant assertion.accepted_prepare_implies_at_least_one_node_voted_prepare(BAL)
+    invariant assertion.confirmed_prepare_implies_accepted_prepare(NODE, BAL)
+    invariant assertion.confirmed_prepare_implies_there_exists_quorum_accepting_ballot(NODE, BAL)
+    invariant assertion.heard_quorum_accept_prepare_implies_confirmed_prepare(NODE, BAL)
+
+    invariant assertion.heard_vote_commit_implies_voted_commit(SELF, OTHER, BAL)
+    invariant assertion.heard_accept_commit_implies_accepted_commit(SELF, OTHER, BAL)
+    invariant assertion.accept_commit_means_at_least_one_vote(NODE, BAL)
+    invariant assertion.if_node_is_ready_to_accept_commit_it_must_accept_commit(NODE, BAL)
+    invariant assertion.if_node_is_ready_to_confirm_commit_it_must_confirm_commit(NODE, BAL)
+    invariant assertion.accepted_commit_implies_node_heard_itself_accept_commit(NODE, BAL)
+    invariant assertion.voted_commit_implies_node_heard_itself_vote_commit(NODE, BAL)
+    invariant assertion.confirmed_commit_implies_it_heard_at_least_one_node_accept_commit(NODE, BAL)
+    invariant assertion.accepted_commit_implies_at_least_one_node_voted_commit(BAL)
+    invariant assertion.confirmed_commit_implies_accepted_commit(NODE, BAL)
+    invariant assertion.confirmed_commit_implies_there_exists_quorum_accepting_ballot(NODE, BAL)
+    invariant assertion.heard_quorum_accept_commit_implies_confirmed_commit(NODE, BAL)
+    invariant assertion.voted_commit_implies_confirmed_prepare(NODE, BAL)
+    invariant assertion.accepted_commit_implies_confirmed_prepare(NODE, BAL)
+    invariant assertion.confirmed_commit_implies_confirmed_prepare(NODE, BAL)
+    invariant assertion.voted_commit_implies_never_voted_abort(NODE, BAL)
+    invariant assertion.accepted_commit_implies_never_accepted_abort(NODE, BAL)
+    invariant assertion.confirmed_commit_implies_never_accepted_abort(NODE, BAL)
+    invariant assertion.accepted_commit_implies_accept_commit_condition_1_or_2(NODE, BAL)
+}
+
+invariant assertion.confirm_prepare_same_after_sufficient_messages(BAL)
+invariant [when_nodes_confirm_commit_they_are_all_compatible]
+        assertion.confirm_commit_only_same_values(NODE1, NODE2)
+
+export network.deliver_vote_prepare
+export network.deliver_accept_prepare
+export node.vote_prepare
+export network.deliver_vote_commit
+export network.deliver_accept_commit
+export node.vote_commit
+export node.confirm_nominate
