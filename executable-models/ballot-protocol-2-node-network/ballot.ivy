@@ -1,0 +1,17 @@
+#lang ivy1.7
+
+# TODO: Both `val_t` and `counter_t` must be ordered.
+# > Ballots are totally ordered, with b.n more significant than b.x.
+type ballot = struct {
+    x: val_t,
+    n: counter_t
+}
+
+relation compatible(B1:ballot, B2:ballot)
+definition compatible(B1, B2) = x(B1) = x(B2)
+
+relation less_than(B1:ballot, B2:ballot)
+definition less_than(B1, B2) = n(B1) < n(B2) | (n(B1) = n(B2) & x(B1) < x(B2))
+
+relation greater_than(B1:ballot, B2:ballot)
+definition greater_than(B1, B2) = n(B1) > n(B2) | (n(B1) = n(B2) & x(B1) > x(B2))
