@@ -45,8 +45,16 @@ object cppdecls = {
                 }
                 return hasher.finish();
             }
-            ValueWrapperPtr combineCandidates(uint64 slotIndex, ValueWrapperPtrSet const& candidates) override { return *candidates.begin(); }
+            ValueWrapperPtr combineCandidates(uint64 slotIndex, ValueWrapperPtrSet const& candidates) override {
+                CLOG_INFO(SCP, "Combining candidates!");
+                return *candidates.begin();
+            }
             void setupTimer(uint64 slotIndex, int timerID, std::chrono::milliseconds timeout, std::function<void()> cb) override {}
+            ValidationLevel validateValue(uint64 slotIndex, Value const& value, bool nomination) override
+            {
+                return kFullyValidatedValue;
+            }
+
 
             public:
 
@@ -61,21 +69,30 @@ object cppdecls = {
                 {
                     // Already initialized.
                     assert(n == mSCPs.size());
+                    assert(n == mNodeIDs.size());
                     return;
                 }
                 while (mNodeIDs.size() < n)
                 {
                     mNodeIDs.emplace_back(PubKeyUtils::random());
                 }
+                assert(mNodeIDs.size() == n);
                 for (auto const& selfID : mNodeIDs)
                 {
                     xdr::xvector<SCPQuorumSet> innerSets;
                     auto qset = std::make_shared<SCPQuorumSet>(n/2 + 1, mNodeIDs, innerSets);
                     normalizeQSet(*qset);
+                    assert(qset->validators.size() == n);
+                    assert(qset->innerSets.size() == 0);
                     auto hash = xdrSha256(*qset);
                     mQSets.emplace(hash, qset);
                     mSCPs.emplace_back(*this, selfID, true, *qset);
                 }
+                assert(n == mSCPs.size());
+            }
+
+            void set_log_prefix(unsigned n) {
+                Logging::setFmt(KeyUtils::toShortString(mNodeIDs.at(n)));
             }
 
             SCP& getSCP(unsigned id) {
@@ -94,16 +111,29 @@ object cppdecls = {
                 return *getSCP(id).getSlot(0, true);
             }
 
-            std::string getSCPBallotState(unsigned id) {
-                return getSCPSlot0(id).getBallotProtocol().getJsonInfo()["phase"].asString();
+            bool isLeader(unsigned id) {
+                auto noms = getSCPSlot0(id).getNominationLeaders();
+                return noms.find(getNodeID(id)) != noms.end();
             }
 
-            unsigned getSCPStatementCount(unsigned id) {
-                return (unsigned)getSCPSlot0(id).getStatementCount();
+            template <typename T>
+            T getSCPBallotState(unsigned numNodes, unsigned self,
+            std::function<T(std::string const&)> mapping) {
+                ensure_ids(numNodes);
+                set_log_prefix(self);
+                return mapping(getSCPSlot0(self).getBallotProtocol().getJsonInfo()["phase"].asString());
             }
 
-            unsigned getNomRound(unsigned id) {
-                return (unsigned)getSCPSlot0(id).getJsonInfo()["nomination"]["roundnumber"].asUInt();
+            unsigned getSCPStatementCount(unsigned numNodes, unsigned self) {
+                ensure_ids(numNodes);
+                set_log_prefix(self);
+                return (unsigned)getSCPSlot0(self).getStatementCount();
+            }
+
+            unsigned getNomRound(unsigned numNodes, unsigned self) {
+                ensure_ids(numNodes);
+                set_log_prefix(self);
+                return (unsigned)getSCPSlot0(self).getJsonInfo()["nomination"]["roundnumber"].asUInt();
             }
         };
     }
@@ -116,12 +146,25 @@ type val_t
 type count_t
 type ballotstate = {prepare, confirm, externalize}
 
+# Ghost variables tracking the history of which nodes did what in the network. NB: these have to be
+# _outside_ the node module, otherwise N-ary relations implicitly get upgraded into N+1-ary, often
+# mean something very different!
+relation voted(NODE:id_t, VAL:val_t)
+relation accepted(NODE:id_t, VAL:val_t)
+
 module node(self:id_t) = {
 
+    # Ghost variables tracking the history of which nodes _self_ has heard from --
+    # unlike the relations outside the node module, these are all implicitly 1-more-ary
+    # than they appear, implicitly all qualified by `self`.
+    relation heard_vote(SRC:id_t, VAL:val_t)
+    relation heard_accept(SRC:id_t, VAL:val_t)
+
     # This receives a nomination _at_ the current node.
-    export action recv_nominate(src:id_t, val:val_t, vote:val_t, accept:val_t) = {
+    export action recv_nominate_vote(src:id_t, vote:val_t) = {
         <<< impure
         gTestSCP.ensure_ids(__CARD__id_t);
+        gTestSCP.set_log_prefix(`self`);
         stellar::SCPEnvelope e;
         auto &s = e.statement;
         s.nodeID = gTestSCP.getNodeID(src);
@@ -129,76 +172,118 @@ module node(self:id_t) = {
         s.pledges.type(stellar::SCP_ST_NOMINATE);
         auto& nom = s.pledges.nominate();
         nom.quorumSetHash = gTestSCP.getQSetHash(src);
-        nom.votes.emplace_back(vote.begin(), vote.end());
-        nom.accepted.emplace_back(accept.begin(), accept.end());
+        stellar::Value vval;
+        vval.emplace_back(uint8_t(vote));
+        nom.votes.emplace_back(vval);
+        auto p = std::make_shared<stellar::SCPEnvelopeWrapper>(e);
+        gTestSCP.getSCP(`self`).receiveEnvelope(p);
+        >>>
+    }
+
+    export action recv_nominate_accept(src:id_t, accept:val_t) = {
+        <<< impure
+        gTestSCP.ensure_ids(__CARD__id_t);
+        gTestSCP.set_log_prefix(`self`);
+        stellar::SCPEnvelope e;
+        auto &s = e.statement;
+        s.nodeID = gTestSCP.getNodeID(src);
+        s.slotIndex = 0;
+        s.pledges.type(stellar::SCP_ST_NOMINATE);
+        auto& nom = s.pledges.nominate();
+        nom.quorumSetHash = gTestSCP.getQSetHash(src);
+        stellar::Value aval;
+        aval.emplace_back(uint8_t(accept));
+        nom.accepted.emplace_back(aval);
         auto p = std::make_shared<stellar::SCPEnvelopeWrapper>(e);
         gTestSCP.getSCP(`self`).receiveEnvelope(p);
         >>>
     }
 
     # This initiates a nomination _from_ the current node.
-    export action nominate(val:val_t, prev:val_t) = {
+    export action nominate(val:val_t) = {
         <<< impure
         gTestSCP.ensure_ids(__CARD__id_t);
-        stellar::Value sval(val.begin(), val.end());
-        stellar::Value sprev(prev.begin(), prev.end());
+        gTestSCP.set_log_prefix(`self`);
+        stellar::Value sval;
+        sval.emplace_back(uint8_t(val));
+        // Fake fixed value for LCL hash: 0xff
+        stellar::Value sprev;
+        sprev.emplace_back(0xff);
         auto vwp = std::make_shared<stellar::ValueWrapper>(sval);
         gTestSCP.getSCP(`self`).nominate(0, vwp, sprev);
         >>>
     }
 
-    export action read_ballotstate returns (b:ballotstate) = {
+    function stmtcount : count_t
+    definition stmtcount =
         <<<
-        gTestSCP.ensure_ids(__CARD__id_t);
-        std::string phase = gTestSCP.getSCPBallotState(`self`);
-        if (phase == "PREPARE")
-        {
-            `b` = `prepare`;
-        }
-        else if (phase == "CONFIRM" || phase == "FINISH")
-        {
-            `b` = `confirm`;
-        }
-        else if (phase == "EXTERNALIZE")
-        {
-            `b` = `externalize`;
-        }
+        gTestSCP.getSCPStatementCount(__CARD__id_t, `self`)
         >>>
-    }
 
-    export action read_stmtcount returns (n:count_t) = {
+    function nomround : count_t
+    definition nomround =
         <<<
-        gTestSCP.ensure_ids(__CARD__id_t);
-        `n` = gTestSCP.getSCPStatementCount(`self`);
+        gTestSCP.getSCPNomRound(__CARD__id_t, `self`)
         >>>
+
+    function bstate : ballotstate
+    definition bstate =
+    <<< gTestSCP.getSCPBallotState<ballotstate>(__CARD__id_t, `self`, [](std::string const& phase) {
+        return ((phase == "PREPARE") ? `prepare` : ((phase == "CONFIRM" || phase == "FINISH") ? `confirm` : `externalize`));
+        })
+    >>>
+
+    function isLeader : bool
+    definition isLeader =
+    <<< gTestSCP.isLeader(`self`) >>>
+
+    after init {
+        voted(X, V) := false;
+        accepted(X, V) := false;
+        heard_vote(X, V) := false;
+        heard_accept(X, V) := false
     }
 
-    export action read_nomround returns (n:count_t) = {
-        <<<
-        gTestSCP.ensure_ids(__CARD__id_t);
-        `n` = gTestSCP.getNomRound(`self`);
-        >>>
+    before recv_nominate_vote {
+        require bstate = prepare;
+        require ~ (src = self);
+        require ~ heard_vote(src, vote);
+        require voted(src, vote)
     }
 
-    var nstmts : count_t
-    after read_stmtcount {
-        nstmts := n
+    after recv_nominate_vote {
+        heard_vote(src, vote) := true;
+        if forall NODE:id_t . ((NODE = self & voted(self, vote) | accepted(self, vote)) |
+                               heard_vote(NODE, vote) | heard_accept(NODE, vote)) {
+            accepted(self, vote) := true;
+        }
     }
 
-    var nomround : count_t
-    after read_nomround {
-        nomround := n
+    before recv_nominate_accept {
+        require bstate = prepare;
+        require ~ (src = self);
+        require ~ heard_accept(src, accept);
+        require accepted(src, accept)
     }
 
-    var bstate : ballotstate
-    after read_ballotstate {
-        bstate := b
+    after recv_nominate_accept {
+        heard_accept(src, accept) := true
     }
 
+    before nominate {
+        require accepted(self, X) = false;
+        require voted(self, X) = false
+    }
+
+    after nominate {
+        if isLeader {
+            voted(self, val) := true
+        }
+    }
 }
 
 interpret id_t -> bv[1]
-interpret val_t -> strbv[4]
+interpret val_t -> bv[1]
 interpret count_t -> bv[16]
 instantiate nodes(ID:id_t) : node(ID)
 extract executable_runner = cppdecls, nodes
