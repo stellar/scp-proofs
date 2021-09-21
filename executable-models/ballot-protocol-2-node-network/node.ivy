@@ -1,0 +1,317 @@
+#lang ivy1.7
+
+object node = {
+    # For some reason treating the following relation definitions as assignments in
+    # an 'after init' block means that Ivy considers the possibility of the
+    # relations having different values, when exploring possible prestates for
+    # actions, though it seems like it should not.
+
+    relation member(X:id_t, S:set_t)
+    definition member(X:id_t, S:set_t) =
+      (X=0 & S=1) |
+      (X=1 & S=2) |
+      (X=0 & S=3) |
+      (X=1 & S=3)
+
+    relation is_quorum(S:set_t)
+    definition is_quorum(S:set_t) = S=3
+
+    relation is_v_blocking(V:id_t, S:set_t)
+    definition is_v_blocking(V:id_t, S:set_t) =
+      ~((V=0 & S=0) |
+        (V=1 & S=0))
+
+    # These relations are state variables, and will
+    # be updated during actions below.
+    relation voted_prepare(SELF:id_t, BAL:ballot_t)
+    relation accepted_prepare(SELF:id_t, BAL:ballot_t)
+    relation confirmed_prepare(SELF:id_t, BAL:ballot_t)
+    relation heard_vote_prepare(SELF:id_t, SRC:id_t, BAL:ballot_t)
+    relation heard_accept_prepare(SELF:id_t, SRC:id_t, BAL:ballot_t)
+    relation voted_commit(SELF:id_t, BAL:ballot_t)
+    relation accepted_commit(SELF:id_t, BAL:ballot_t)
+    relation confirmed_commit(SELF:id_t, BAL:ballot_t)
+    relation heard_vote_commit(SELF:id_t, SRC:id_t, BAL:ballot_t)
+    relation heard_accept_commit(SELF:id_t, SRC:id_t, BAL:ballot_t)
+    relation compatible_with_nomination_output(SELF:id_t, BAL:ballot_t)
+
+    after init {
+        voted_prepare(SELF, BAL) := false;
+        accepted_prepare(SELF, BAL) := false;
+        confirmed_prepare(SELF, BAL) := false;
+        heard_vote_prepare(SELF, SRC, BAL) := false;
+        heard_accept_prepare(SELF, SRC, BAL) := false;
+        voted_commit(SELF, BAL) := false;
+        accepted_commit(SELF, BAL) := false;
+        confirmed_commit(SELF, BAL) := false;
+        heard_vote_commit(SELF, SRC, BAL) := false;
+        heard_accept_commit(SELF, SRC, BAL) := false;
+        compatible_with_nomination_output(SELF, BAL) := false;
+    }
+
+    # The remaining relations are definitions, used as
+    # abbreviations inside logical formulas elsewhere.
+    relation heard_set_vote_or_accept_prepare(SELF:id_t, SET:set_t, BAL:ballot_t)
+    definition heard_set_vote_or_accept_prepare(SELF, S, BAL) =
+        forall V. member(V, S) ->
+            (
+                heard_vote_prepare(SELF, V, BAL) |
+                heard_accept_prepare(SELF, V, BAL)
+            )
+
+    relation heard_set_accept_prepare(SELF:id_t, SET:set_t, BAL:ballot_t)
+    definition heard_set_accept_prepare(SELF, S, BAL) =
+        forall V. member(V, S) -> heard_accept_prepare(SELF, V, BAL)
+
+    relation accept_prepare_condition_1(SELF:id_t, BAL:ballot_t)
+    definition accept_prepare_condition_1(SELF, BAL) =
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_vote_or_accept_prepare(SELF, Q, BAL)
+            )
+
+    relation accept_prepare_condition_2(SELF:id_t, BAL:ballot_t)
+    definition accept_prepare_condition_2(SELF, BAL) =
+        exists S.
+            (
+                is_v_blocking(SELF, S) &
+                heard_set_accept_prepare(SELF, S, BAL)
+            )
+
+    relation voted_to_commit_lesser_incompatible_ballot_t(SELF:id_t, BAL:ballot_t)
+    definition voted_to_commit_lesser_incompatible_ballot_t(SELF, BAL) =
+        exists BAL2. ~compatible(BAL, BAL2) & BAL2 < BAL & voted_commit(SELF, BAL2)
+
+    relation accepted_to_commit_lesser_incompatible_ballot_t(SELF:id_t, BAL:ballot_t)
+    definition accepted_to_commit_lesser_incompatible_ballot_t(SELF, BAL) =
+        exists BAL2. ~compatible(BAL, BAL2) & BAL2 < BAL & accepted_commit(SELF, BAL2)
+
+    relation ready_to_accept_prepare_but_have_not_accepted_prepare(SELF:id_t, BAL:ballot_t)
+    definition ready_to_accept_prepare_but_have_not_accepted_prepare(SELF, BAL) =
+        ~accepted_prepare(SELF, BAL) &
+        ~accepted_to_commit_lesser_incompatible_ballot_t(SELF, BAL) &
+        (accept_prepare_condition_1(SELF, BAL) |
+	     accept_prepare_condition_2(SELF, BAL))
+
+    relation ready_to_confirm_prepare_but_have_not_confirmed_prepare(SELF:id_t, BAL:ballot_t)
+    definition ready_to_confirm_prepare_but_have_not_confirmed_prepare(SELF, BAL) =
+        ~confirmed_prepare(SELF, BAL) &
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_accept_prepare(SELF, Q, BAL)
+            )
+
+    relation heard_set_vote_or_accept_commit(SELF:id_t, SET:set_t, BAL:ballot_t)
+    definition heard_set_vote_or_accept_commit(SELF, S, BAL) =
+        forall V. member(V, S) ->
+            (
+                heard_vote_commit(SELF, V, BAL) |
+                heard_accept_commit(SELF, V, BAL)
+            )
+
+    relation heard_set_accept_commit(SELF:id_t, SET:set_t, BAL:ballot_t)
+    definition heard_set_accept_commit(SELF, S, BAL) =
+        forall V. member(V, S) -> heard_accept_commit(SELF, V, BAL)
+
+    relation accept_commit_condition_1(SELF:id_t, BAL:ballot_t)
+    definition accept_commit_condition_1(SELF, BAL) =
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_vote_or_accept_commit(SELF, Q, BAL)
+            )
+
+    relation accept_commit_condition_2(SELF:id_t, BAL:ballot_t)
+    definition accept_commit_condition_2(SELF, BAL) =
+        exists S.
+            (
+                is_v_blocking(SELF, S) &
+                heard_set_accept_commit(SELF, S, BAL)
+            )
+
+    # Checks whether SELF has voted abort(BAL).
+    # By definition, a ballot b is prepared if and only if { abort(b') | b' ⋦ b }.
+    # Therefore, if SELF has voted to prepare greater, incompatible BAL2,
+    # then that implies that SELF has voted abort(BAL).
+    relation voted_abort(SELF:id_t, BAL:ballot_t)
+    definition voted_abort(SELF, BAL) =
+        exists BAL2. BAL2 > BAL & ~compatible(BAL, BAL2) & voted_prepare(SELF, BAL2)
+
+    # See the comment above for voted_abort.
+    relation accepted_abort(SELF:id_t, BAL:ballot_t)
+    definition accepted_abort(SELF, BAL) =
+        exists BAL2. BAL2 > BAL & ~compatible(BAL, BAL2) & accepted_prepare(SELF, BAL2)
+
+    # Checks whether SELF is ready to accept, but has not accepted commit(BAL).
+    # 1. `~accepted_commit(SELF, BAL)`
+    #    -> trivial
+    # 2. `~accepted_abort(SELF, BAL)`
+    #    -> We can accept only if we have not aborted it.
+    # 3. `confirmed_prepare(SELF, BAL)`
+    #    -> This condition is necessary since P.20 of the white paper states:
+    #
+    #       > To commit a ballot b and externalize its value b.x,
+    #       > SCP nodes first accept and confirm b is prepared, then accept and confirm commit b.
+    relation ready_to_accept_commit_but_have_not_accepted_commit(SELF:id_t, BAL:ballot_t)
+    definition ready_to_accept_commit_but_have_not_accepted_commit(SELF, BAL) =
+        ~accepted_commit(SELF, BAL) &
+        ~accepted_abort(SELF, BAL) &
+        confirmed_prepare(SELF, BAL) &
+        (accept_commit_condition_1(SELF, BAL) |
+	     accept_commit_condition_2(SELF, BAL))
+
+    relation ready_to_confirm_commit_but_have_not_confirmed_commit(SELF:id_t, BAL:ballot_t)
+    definition ready_to_confirm_commit_but_have_not_confirmed_commit(SELF, BAL) =
+        ~confirmed_commit(SELF, BAL) &
+        exists Q.
+            (
+                is_quorum(Q) &
+                member(SELF, Q) &
+                heard_set_accept_commit(SELF, Q, BAL)
+            )
+
+    # `self_id` confirms `NOMINATE(bal.x)`.
+    # We can't just pass the value here since this model doesn't know
+    # about `bal.x` and `bal.n`.
+    action confirm_nominate(self_id:id_t, bal:ballot_t) =
+    {
+        compatible_with_nomination_output(self_id, BAL) := compatible(BAL, bal);
+    }
+
+    # self_id votes to prepare bal.
+    # NB: prepare(bal) is actually a collection of statements,
+    # not one statement. By definition, voting to prepare bal is equivalent to
+    # voting for each statement in { abort(bal') | bal' ⋦ bal }.
+    action vote_prepare(self_id:id_t, bal:ballot_t) =
+    {
+        require ~voted_prepare(self_id, bal);
+        # Since we're trying to vote to prepare bal,
+        # we must make sure that we haven't voted or accepted to commit
+        # a lesser, incompatible ballot.
+        #
+        # P.22 of the white paper states:
+        #
+        # > For a given ballot, commit and abort are contradictory,
+        # > so a well-behaved node may vote for at most one of them.
+        require ~voted_to_commit_lesser_incompatible_ballot_t(self_id, bal);
+        require ~accepted_to_commit_lesser_incompatible_ballot_t(self_id, bal);
+
+        require compatible_with_nomination_output(self_id, bal);
+
+        voted_prepare(self_id, bal) := true;
+        heard_vote_prepare(self_id, self_id, bal) := true;
+        if ready_to_accept_prepare_but_have_not_accepted_prepare(self_id, bal) {
+            accepted_prepare(self_id, bal) := true;
+            heard_accept_prepare(self_id, self_id, bal) := true;
+        };
+        if ready_to_confirm_prepare_but_have_not_confirmed_prepare(self_id, bal) {
+            confirmed_prepare(self_id, bal) := true;
+            # Confirming `prepare(bal)` might let us accept `commit(bal)`
+            # based on messages that we've already received.
+            if ready_to_accept_commit_but_have_not_accepted_commit(self_id, bal) {
+                accepted_commit(self_id, bal) := true;
+                heard_accept_commit(self_id, self_id, bal) := true;
+            };
+            if ready_to_confirm_commit_but_have_not_confirmed_commit(self_id, bal) {
+                confirmed_commit(self_id, bal) := true;
+            };
+        };
+    }
+
+    action recv_vote_prepare(self_id:id_t, src:id_t, bal:ballot_t) =
+    {
+        heard_vote_prepare(self_id, src, bal) := true;
+        if ready_to_accept_prepare_but_have_not_accepted_prepare(self_id, bal) {
+            accepted_prepare(self_id, bal) := true;
+            heard_accept_prepare(self_id, self_id, bal) := true;
+        };
+        if ready_to_confirm_prepare_but_have_not_confirmed_prepare(self_id, bal) {
+            confirmed_prepare(self_id, bal) := true;
+            # Confirming `prepare(bal)` might let us accept `commit(bal)`
+            # based on messages that we've already received.
+            if ready_to_accept_commit_but_have_not_accepted_commit(self_id, bal) {
+                accepted_commit(self_id, bal) := true;
+                heard_accept_commit(self_id, self_id, bal) := true;
+            };
+            if ready_to_confirm_commit_but_have_not_confirmed_commit(self_id, bal) {
+                confirmed_commit(self_id, bal) := true;
+            };
+        };
+    }
+
+    action recv_accept_prepare(self_id:id_t, src:id_t, bal:ballot_t) =
+    {
+        heard_accept_prepare(self_id, src, bal) := true;
+        if ready_to_accept_prepare_but_have_not_accepted_prepare(self_id, bal) {
+            accepted_prepare(self_id, bal) := true;
+            heard_accept_prepare(self_id, self_id, bal) := true;
+        };
+        if ready_to_confirm_prepare_but_have_not_confirmed_prepare(self_id, bal) {
+            confirmed_prepare(self_id, bal) := true;
+            # Confirming `prepare(bal)` might let us accept `commit(bal)`
+            # based on messages that we've already received.
+            if ready_to_accept_commit_but_have_not_accepted_commit(self_id, bal) {
+                accepted_commit(self_id, bal) := true;
+                heard_accept_commit(self_id, self_id, bal) := true;
+            };
+            if ready_to_confirm_commit_but_have_not_confirmed_commit(self_id, bal) {
+                confirmed_commit(self_id, bal) := true;
+            };
+        };
+    }
+
+    action vote_commit(self_id:id_t, bal:ballot_t) =
+    {
+        require ~voted_commit(self_id, bal);
+
+        # We need to make sure that we have confirmed prepare(bal).
+        #
+        # > More precisely, then, commit b is valid to vote for only if b is confirmed prepared,
+        # > which nodes ensure through federated voting on the corresponding abort statements.
+        #
+        # from P.22 of the white paper.
+        require confirmed_prepare(self_id, bal);
+
+        require ~voted_abort(self_id, bal);
+        require ~accepted_abort(self_id, bal);
+
+        voted_commit(self_id, bal) := true;
+        heard_vote_commit(self_id, self_id, bal) := true;
+        if ready_to_accept_commit_but_have_not_accepted_commit(self_id, bal) {
+            accepted_commit(self_id, bal) := true;
+            heard_accept_commit(self_id, self_id, bal) := true;
+        };
+        if ready_to_confirm_commit_but_have_not_confirmed_commit(self_id, bal) {
+            confirmed_commit(self_id, bal) := true;
+        };
+    }
+
+    action recv_vote_commit(self_id:id_t, src:id_t, bal:ballot_t) =
+    {
+        heard_vote_commit(self_id, src, bal) := true;
+        if ready_to_accept_commit_but_have_not_accepted_commit(self_id, bal) {
+            accepted_commit(self_id, bal) := true;
+            heard_accept_commit(self_id, self_id, bal) := true;
+        };
+        if ready_to_confirm_commit_but_have_not_confirmed_commit(self_id, bal) {
+            confirmed_commit(self_id, bal) := true;
+        };
+    }
+
+    action recv_accept_commit(self_id:id_t, src:id_t, bal:ballot_t) =
+    {
+        heard_accept_commit(self_id, src, bal) := true;
+        if ready_to_accept_commit_but_have_not_accepted_commit(self_id, bal) {
+            accepted_commit(self_id, bal) := true;
+            heard_accept_commit(self_id, self_id, bal) := true;
+        };
+        if ready_to_confirm_commit_but_have_not_confirmed_commit(self_id, bal) {
+            confirmed_commit(self_id, bal) := true;
+        };
+    }
+}

@@ -1,0 +1,36 @@
+#lang ivy1.7
+
+object network =
+{
+    # Deliver the message "src voted prepare(bal)" to dst.
+    action deliver_vote_prepare(src:id_t, dst:id_t, bal:ballot_t) =
+    {
+        require node.voted_prepare(src, bal);
+        require ~node.heard_vote_prepare(dst, src, bal);
+        call node.recv_vote_prepare(dst, src, bal);
+    }
+
+    # Deliver the message "src accepted prepare(bal)" to dst.
+    action deliver_accept_prepare(src:id_t, dst:id_t, bal:ballot_t) =
+    {
+        require node.accepted_prepare(src, bal);
+        require ~node.heard_accept_prepare(dst, src, bal);
+        call node.recv_accept_prepare(dst, src, bal);
+    }
+
+    # Deliver the message "src voted commit(bal)" to dst.
+    action deliver_vote_commit(src:id_t, dst:id_t, bal:ballot_t) =
+    {
+        require node.voted_commit(src, bal);
+        require ~node.heard_vote_commit(dst, src, bal);
+        call node.recv_vote_commit(dst, src, bal);
+    }
+
+    # Deliver the message "src accepted commit(bal)" to dst.
+    action deliver_accept_commit(src:id_t, dst:id_t, bal:ballot_t) =
+    {
+        require node.accepted_commit(src, bal);
+        require ~node.heard_accept_commit(dst, src, bal);
+        call node.recv_accept_commit(dst, src, bal);
+    }
+}
