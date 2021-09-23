@@ -1,6 +1,7 @@
 # This has to be a path to a checked-out, configured and _built_ stellar-core
 # source tree.
 CORE=$(HOME)/src/stellar-core
+IVY=$(HOME)/src/ivy
 
 CORE_OBJS=$(CORE)/src/crypto/BLAKE2.o \
           $(CORE)/src/crypto/Hex.o \
@@ -35,13 +36,18 @@ CORE_LIBDIRS=-L $(CORE)/lib \
 CORE_INCLUDES=-I $(CORE) \
               -I $(CORE)/src \
               -I $(CORE)/lib/xdrpp \
-              -I $(CORE)/lib/fmt/include
+              -I $(CORE)/lib/fmt/include \
+              -I $(CORE)/lib/spdlog/include
+
+# use Ivy's version of z3
+IVY_INCLUDES=-I$(IVY)/ivy/include
+IVY_LIBDIRS=-I$(IVY)/ivy/lib
 
 executable: $(CORE_OBJS) executable.o
-	clang++ -g -o $@ $^ $(CORE_LIBDIRS) -lpthread -lsodium -l3rdparty -lxdrpp -lz3 -o executable
+	clang++ -g -o $@ $^ $(CORE_LIBDIRS) $(IVY_LIBDIRS) -lpthread -lsodium -l3rdparty -lxdrpp -lz3 -Wl,-rpath,$(IVY_LIBDIRS) -o executable
 
 executable.o: executable.cpp executable.h Makefile
-	clang++ -c -g -std=c++17 -pthread $(CORE_INCLUDES) -o $@ $<
+	clang++ -c -O2 -g -std=c++17 -pthread $(CORE_INCLUDES) $(IVY_INCLUDES) -o $@ $<
 
 executable.cpp executable.h: executable.ivy Makefile
 	ivy_to_cpp target=test isolate=executable_runner build=false $<
