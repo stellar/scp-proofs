@@ -1,0 +1,40 @@
+#lang ivy1.7
+
+include sort
+include node
+include network
+include assertion
+
+# Allow Ivy to cause any number of the following actions.
+
+export node.confirm_nominate
+export node.vote
+export network.deliver_vote
+export network.deliver_accept
+
+export assertion.assert_voted
+export assertion.assert_accepted
+export assertion.assert_confirmed
+export assertion.assert_not_voted
+export assertion.assert_not_accepted
+export assertion.assert_not_confirmed
+
+export assertion.check_invariants
+
+# While `counter` is unbounded theoretically,
+# it has to be bounded in an executable.
+# Each `ballot_t` is interpreted as a 2-bit vector.
+# Thus we will use the first bit as `x` and the second bit as `n`.
+# More specifically,
+# 0 = {0, 0} => (x = 0, n = 0)
+# 1 = {0, 1} => (x = 0, n = 1)
+# 2 = {1, 0} => (x = 1, n = 0)
+# 3 = {1, 1} => (x = 1, n = 1)
+# Therefore, 0 and 1 are compatible, and 2 and 3 are compatible.
+interpret ballot_t -> bv[2]
+object compatible_definition = {
+    definition compatible(BAL1, BAL2) = (BAL1<=1 & BAL2<=1) | (BAL1>=2 & BAL2>=2)
+}
+
+# Extract a runnable node parameterized by a self-id
+extract executable_runner = node, network, id_t, assertion, ballot_properties, compatible_definition
