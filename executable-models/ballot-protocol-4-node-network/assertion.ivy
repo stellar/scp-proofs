@@ -1,0 +1,156 @@
+#lang ivy1.7
+
+object assertion =
+{
+    relation heard_vote_implies_voted(TYPE:statement_t, SELF:id_t, OTHER:id_t, BAL:ballot_t)
+    definition heard_vote_implies_voted(TYPE, SELF, OTHER, BAL) =
+        (node.heard_vote(TYPE, SELF, OTHER, BAL)) -> node.voted(TYPE, OTHER, BAL)
+
+    relation heard_accept_implies_accepted(TYPE:statement_t, SELF:id_t, OTHER:id_t, BAL:ballot_t)
+    definition heard_accept_implies_accepted(TYPE, SELF, OTHER, BAL) =
+        (node.heard_accept(TYPE, SELF, OTHER, BAL)) -> node.accepted(TYPE, OTHER, BAL)
+
+    relation accept_means_at_least_one_vote(TYPE:statement_t, SELF:id_t, BAL:ballot_t)
+    definition accept_means_at_least_one_vote(TYPE, SELF, BAL) =
+        node.accepted(TYPE, SELF, BAL) -> (exists OTHER. node.voted(TYPE, OTHER, BAL))
+
+    relation confirm_same_after_sufficient_messages(TYPE:statement_t, BAL:ballot_t)
+    definition confirm_same_after_sufficient_messages(TYPE, BAL) =
+        (exists NODE1, NODE2. node.confirmed(TYPE, NODE1, BAL) & ~node.confirmed(TYPE, NODE2, BAL))
+            -> (exists NODE1, NODE2. node.accepted(TYPE, NODE1, BAL) & ~node.heard_accept(TYPE, NODE2, NODE1, BAL))
+
+    relation if_node_is_ready_to_accept_it_must_accept(TYPE:statement_t, NODE:id_t, BAL:ballot_t)
+    definition if_node_is_ready_to_accept_it_must_accept(TYPE, NODE, BAL) =
+        ~node.ready_to_accept_but_have_not_accepted(TYPE, NODE, BAL)
+
+    relation if_node_is_ready_to_confirm_it_must_confirm(TYPE:statement_t, NODE:id_t, BAL:ballot_t)
+    definition if_node_is_ready_to_confirm_it_must_confirm(TYPE, NODE, BAL) =
+        ~node.ready_to_confirm_but_have_not_confirmed(TYPE, NODE, BAL)
+
+    relation accepted_implies_node_heard_itself_accept(TYPE:statement_t, NODE:id_t, BAL:ballot_t)
+    definition accepted_implies_node_heard_itself_accept(TYPE, NODE, BAL) =
+        node.accepted(TYPE, NODE, BAL) -> node.heard_accept(TYPE, NODE, NODE, BAL)
+
+    relation voted_implies_node_heard_itself_vote(TYPE:statement_t, NODE:id_t, BAL:ballot_t)
+    definition voted_implies_node_heard_itself_vote(TYPE, NODE, BAL) =
+        node.voted(TYPE, NODE, BAL) -> node.heard_vote(TYPE, NODE, NODE, BAL)
+
+    relation accepted_implies_at_least_one_node_voted(TYPE:statement_t, BAL:ballot_t)
+    definition accepted_implies_at_least_one_node_voted(TYPE, BAL) =
+        (exists NODE1. node.accepted(TYPE, NODE1, BAL)) -> (exists NODE2. node.voted(TYPE, NODE2, BAL))
+
+    relation confirmed_implies_accepted(TYPE:statement_t, NODE:id_t, BAL:ballot_t)
+    definition confirmed_implies_accepted(TYPE, NODE, BAL) =
+        node.confirmed(TYPE, NODE, BAL) -> node.accepted(TYPE, NODE, BAL)
+
+    relation confirmed_implies_there_exists_quorum_accepting_ballot(TYPE:statement_t, NODE:id_t, BAL:ballot_t)
+    definition confirmed_implies_there_exists_quorum_accepting_ballot(TYPE, NODE, BAL) =
+        node.confirmed(TYPE, NODE, BAL) ->
+            (exists Q. node.is_quorum(Q) & node.member(NODE, Q) & node.heard_set_accept(TYPE, NODE, Q, BAL))
+
+    relation heard_quorum_accept_implies_confirmed(TYPE:statement_t, NODE1:id_t, Q:set_t, BAL:ballot_t)
+    definition heard_quorum_accept_implies_confirmed(TYPE, NODE1, Q, BAL) =
+        (node.is_quorum(Q) &
+         node.member(NODE1, Q) &
+         forall NODE2. (node.member(NODE2, Q) -> node.heard_accept(TYPE, NODE1, NODE2, BAL)))
+            -> node.confirmed(TYPE, NODE1, BAL)
+
+    relation confirm_commit_same_after_sufficient_messages(BAL:ballot_t)
+    definition confirm_commit_same_after_sufficient_messages(BAL) =
+        (exists NODE1, NODE2. node.confirmed(commit, NODE1, BAL) & ~node.confirmed(commit, NODE2, BAL))
+            -> (exists NODE1, NODE2. node.accepted(commit, NODE1, BAL) & ~node.heard_accept(commit, NODE2, NODE1, BAL))
+
+    relation voted_commit_implies_confirmed_prepare(NODE:id_t, BAL:ballot_t)
+    definition voted_commit_implies_confirmed_prepare(NODE, BAL) = node.voted(commit, NODE, BAL) -> node.confirmed(prepare, NODE, BAL)
+
+    relation accepted_commit_implies_confirmed_prepare(NODE:id_t, BAL:ballot_t)
+    definition accepted_commit_implies_confirmed_prepare(NODE, BAL) = node.accepted(commit, NODE, BAL) -> node.confirmed(prepare, NODE, BAL)
+
+    relation confirmed_commit_implies_confirmed_prepare(NODE:id_t, BAL:ballot_t)
+    definition confirmed_commit_implies_confirmed_prepare(NODE, BAL) = node.confirmed(commit, NODE, BAL) -> node.confirmed(prepare, NODE, BAL)
+
+    relation voted_commit_implies_never_voted_abort(NODE:id_t, BAL:ballot_t)
+    definition voted_commit_implies_never_voted_abort(NODE, BAL) = node.voted(commit, NODE, BAL) -> ~node.voted_abort(NODE, BAL)
+
+    relation accepted_commit_implies_never_accepted_abort(NODE:id_t, BAL:ballot_t)
+    definition accepted_commit_implies_never_accepted_abort(NODE, BAL) = node.accepted(commit, NODE, BAL) -> ~node.accepted_abort(NODE, BAL)
+
+    relation confirmed_commit_implies_never_accepted_abort(NODE:id_t, BAL:ballot_t)
+    definition confirmed_commit_implies_never_accepted_abort(NODE, BAL) = node.confirmed(commit, NODE, BAL) -> ~node.accepted_abort(NODE, BAL)
+
+    relation never_accepted_to_prepare_greater_incompatible_ballots_after_accepting_to_commit(NODE:id_t, BAL:ballot_t)
+    definition never_accepted_to_prepare_greater_incompatible_ballots_after_accepting_to_commit(NODE, BAL) =
+        node.accepted(commit, NODE, BAL) ->
+            (forall OTHERBAL. node.accepted(prepare, NODE, OTHERBAL) -> (OTHERBAL < BAL | compatible(BAL, OTHERBAL)))
+
+    relation accepted_implies_either_voted_or_someone_else_accepted(TYPE:statement_t, SELF:id_t, BAL:ballot_t)
+    definition accepted_implies_either_voted_or_someone_else_accepted(TYPE, SELF, BAL) =
+        node.accepted(TYPE, SELF, BAL) ->
+            (node.voted(TYPE, SELF, BAL) | exists OTHER. SELF ~= OTHER & node.heard_accept(TYPE, SELF, OTHER, BAL))
+
+    relation accepted_implies_accept_condition_1_or_2(TYPE:statement_t, NODE:id_t, BAL:ballot_t)
+    definition accepted_implies_accept_condition_1_or_2(TYPE, NODE, BAL) =
+        node.accepted(TYPE, NODE, BAL) -> (node.accept_condition_1(TYPE, NODE, BAL) | node.accept_condition_2(TYPE, NODE, BAL))
+
+    # Ideally, this would take 4 arguments.
+    # But Ivy can't seem to convert a 4-argument relation into a C++ function.
+    relation confirm_commit_only_same_values(NODE1:id_t, NODE2:id_t, BAL1:ballot_t, BAL2:ballot_t)
+    definition confirm_commit_only_same_values(NODE1, NODE2, BAL1, BAL2) =
+        (node.confirmed(commit, NODE1, BAL1) & node.confirmed(commit, NODE2, BAL2)) -> compatible(BAL1, BAL2)
+
+    action check_invariants =
+    {
+        ensure accept_means_at_least_one_vote(TYPE, SELF, BAL);
+        ensure accepted_commit_implies_confirmed_prepare(NODE, BAL);
+        ensure accepted_commit_implies_never_accepted_abort(NODE, BAL);
+        ensure accepted_implies_accept_condition_1_or_2(TYPE, NODE, BAL);
+        ensure accepted_implies_at_least_one_node_voted(TYPE, BAL);
+        ensure accepted_implies_either_voted_or_someone_else_accepted(TYPE, SELF, BAL);
+        ensure accepted_implies_node_heard_itself_accept(TYPE, NODE, BAL);
+        ensure confirm_commit_only_same_values(NODE1, NODE2, BAL1, BAL2);
+        ensure confirm_commit_same_after_sufficient_messages(BAL);
+        ensure confirm_same_after_sufficient_messages(TYPE, BAL);
+        ensure confirmed_commit_implies_confirmed_prepare(NODE, BAL);
+        ensure confirmed_commit_implies_never_accepted_abort(NODE, BAL);
+        ensure confirmed_implies_accepted(TYPE, NODE, BAL);
+        ensure confirmed_implies_there_exists_quorum_accepting_ballot(TYPE, NODE, BAL);
+        ensure heard_accept_implies_accepted(TYPE, SELF, OTHER, BAL);
+        ensure heard_quorum_accept_implies_confirmed(TYPE, NODE1, QUORUM, BAL);
+        ensure heard_vote_implies_voted(TYPE, SELF, OTHER, BAL);
+        ensure if_node_is_ready_to_accept_it_must_accept(TYPE, NODE, BAL);
+        ensure if_node_is_ready_to_confirm_it_must_confirm(TYPE, NODE, BAL);
+        ensure never_accepted_to_prepare_greater_incompatible_ballots_after_accepting_to_commit(NODE, BAL);
+        ensure voted_commit_implies_confirmed_prepare(NODE, BAL);
+        ensure voted_commit_implies_never_voted_abort(NODE, BAL);
+    }
+
+    action assert_voted(st:statement_t, self_id:id_t, val:ballot_t) =
+    {
+        ensure node.voted(st, self_id, val);
+    }
+
+    action assert_not_voted(st:statement_t, self_id:id_t, val:ballot_t) =
+    {
+        ensure ~node.voted(st, self_id, val);
+    }
+
+    action assert_accepted(st:statement_t, self_id:id_t, val:ballot_t) =
+    {
+        ensure node.accepted(st, self_id, val);
+    }
+
+    action assert_not_accepted(st:statement_t, self_id:id_t, val:ballot_t) =
+    {
+        ensure ~node.accepted(st, self_id, val);
+    }
+
+    action assert_confirmed(st:statement_t, self_id:id_t, val:ballot_t) =
+    {
+        ensure node.confirmed(st, self_id, val);
+    }
+
+    action assert_not_confirmed(st:statement_t, self_id:id_t, val:ballot_t) =
+    {
+        ensure ~node.confirmed(st, self_id, val);
+    }
+}
