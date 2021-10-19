@@ -48,12 +48,12 @@ object assertion =
         node.confirmed(TYPE, NODE, BAL) ->
             (exists Q. node.is_quorum(Q) & node.member(NODE, Q) & node.heard_set_accept(TYPE, NODE, Q, BAL))
 
-    relation heard_quorum_accept_implies_confirmed(TYPE:statement_t, NODE1:id_t, BAL:ballot_t)
-    definition heard_quorum_accept_implies_confirmed(TYPE, NODE1, BAL) =
-        (exists Q.
-            node.is_quorum(Q) &
-            node.member(NODE1, Q) &
-            forall NODE2. (node.member(NODE2, Q) -> node.heard_accept(TYPE, NODE1, NODE2, BAL))) -> node.confirmed(TYPE, NODE1, BAL)
+    relation heard_quorum_accept_implies_confirmed(TYPE:statement_t, NODE1:id_t, Q:set_t, BAL:ballot_t)
+    definition heard_quorum_accept_implies_confirmed(TYPE, NODE1, Q, BAL) =
+        (node.is_quorum(Q) &
+         node.member(NODE1, Q) &
+         forall NODE2. (node.member(NODE2, Q) -> node.heard_accept(TYPE, NODE1, NODE2, BAL)))
+            -> node.confirmed(TYPE, NODE1, BAL)
 
     relation confirm_commit_same_after_sufficient_messages(BAL:ballot_t)
     definition confirm_commit_same_after_sufficient_messages(BAL) =
@@ -94,9 +94,9 @@ object assertion =
 
     # Ideally, this would take 4 arguments.
     # But Ivy can't seem to convert a 4-argument relation into a C++ function.
-    relation confirm_commit_only_same_values(NODE1:id_t, NODE2:id_t)
-    definition confirm_commit_only_same_values(NODE1, NODE2) =
-        forall BAL1, BAL2. (node.confirmed(commit, NODE1, BAL1) & node.confirmed(commit, NODE2, BAL2)) -> compatible(BAL1, BAL2)
+    relation confirm_commit_only_same_values(NODE1:id_t, NODE2:id_t, BAL1:ballot_t, BAL2:ballot_t)
+    definition confirm_commit_only_same_values(NODE1, NODE2, BAL1, BAL2) =
+        (node.confirmed(commit, NODE1, BAL1) & node.confirmed(commit, NODE2, BAL2)) -> compatible(BAL1, BAL2)
 
     action check_invariants =
     {
@@ -107,7 +107,7 @@ object assertion =
         ensure accepted_implies_at_least_one_node_voted(TYPE, BAL);
         ensure accepted_implies_either_voted_or_someone_else_accepted(TYPE, SELF, BAL);
         ensure accepted_implies_node_heard_itself_accept(TYPE, NODE, BAL);
-        ensure confirm_commit_only_same_values(NODE1, NODE2);
+        ensure confirm_commit_only_same_values(NODE1, NODE2, BAL1, BAL2);
         ensure confirm_commit_same_after_sufficient_messages(BAL);
         ensure confirm_same_after_sufficient_messages(TYPE, BAL);
         ensure confirmed_commit_implies_confirmed_prepare(NODE, BAL);
@@ -115,7 +115,7 @@ object assertion =
         ensure confirmed_implies_accepted(TYPE, NODE, BAL);
         ensure confirmed_implies_there_exists_quorum_accepting_ballot(TYPE, NODE, BAL);
         ensure heard_accept_implies_accepted(TYPE, SELF, OTHER, BAL);
-        ensure heard_quorum_accept_implies_confirmed(TYPE, NODE1, BAL);
+        ensure heard_quorum_accept_implies_confirmed(TYPE, NODE1, QUORUM, BAL);
         ensure heard_vote_implies_voted(TYPE, SELF, OTHER, BAL);
         ensure if_node_is_ready_to_accept_it_must_accept(TYPE, NODE, BAL);
         ensure if_node_is_ready_to_confirm_it_must_confirm(TYPE, NODE, BAL);

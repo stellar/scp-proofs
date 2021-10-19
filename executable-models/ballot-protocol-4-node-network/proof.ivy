@@ -13,18 +13,9 @@ private {
     invariant assertion.heard_vote_implies_voted(TYPE, SELF, OTHER, BAL)
     invariant assertion.heard_accept_implies_accepted(TYPE, SELF, OTHER, BAL)
     invariant assertion.accept_means_at_least_one_vote(TYPE, NODE, BAL)
-    invariant assertion.if_node_is_ready_to_confirm_it_must_confirm(TYPE, NODE, BAL)
-    invariant assertion.accepted_implies_node_heard_itself_accept(TYPE, NODE, BAL)
     invariant assertion.voted_implies_node_heard_itself_vote(TYPE, NODE, BAL)
-    invariant assertion.accepted_implies_at_least_one_node_voted(TYPE, BAL)
-    invariant assertion.confirmed_implies_accepted(TYPE, NODE, BAL)
     invariant assertion.confirmed_implies_there_exists_quorum_accepting_ballot(TYPE, NODE, BAL)
-    invariant assertion.heard_quorum_accept_implies_confirmed(TYPE, NODE, BAL)
 
-# For some reason, I don't have this for prepare?
-#     invariant assertion.if_node_is_ready_to_accept_commit_it_must_accept_commit(NODE, BAL)
-
-    invariant assertion.voted_commit_implies_confirmed_prepare(NODE, BAL)
     invariant assertion.accepted_commit_implies_confirmed_prepare(NODE, BAL)
     invariant assertion.confirmed_commit_implies_confirmed_prepare(NODE, BAL)
     invariant assertion.voted_commit_implies_never_voted_abort(NODE, BAL)
@@ -37,7 +28,7 @@ private {
 }
 
 invariant [when_nodes_confirm_commit_they_are_all_compatible]
-        assertion.confirm_commit_only_same_values(NODE1, NODE2)
+        assertion.confirm_commit_only_same_values(NODE1, NODE2, BAL1, BAL2)
 
 export network.deliver_vote
 export network.deliver_accept
