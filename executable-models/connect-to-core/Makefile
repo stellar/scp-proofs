@@ -27,7 +27,7 @@ CORE_OBJS=$(CORE)/src/crypto/BLAKE2.o \
           $(CORE)/src/util/Scheduler.o \
           $(CORE)/src/util/Timer.o \
           $(CORE)/src/util/numeric.o \
-          $(CORE)/src/util/types.o \
+          $(CORE)/src/util/types.o
 
 CORE_LIBDIRS=-L $(CORE)/lib \
              -L $(CORE)/lib/xdrpp/xdrpp/ \
@@ -45,9 +45,15 @@ IVY_LIBDIRS=-I$(IVY)/ivy/lib
 
 executable: $(CORE_OBJS) executable.o
 	clang++ -g -o $@ $^ $(CORE_LIBDIRS) $(IVY_LIBDIRS) -lpthread -lsodium -l3rdparty -lxdrpp -lz3 -Wl,-rpath,$(IVY_LIBDIRS) -o executable
+	echo "don't forget to export LD_LIBRARY_PATH=$(IVY_LIBDIRS)"
 
 executable.o: executable.cpp executable.h Makefile
 	clang++ -c -O2 -g -std=c++17 -pthread $(CORE_INCLUDES) $(IVY_INCLUDES) -o $@ $<
 
 executable.cpp executable.h: executable.ivy Makefile
 	ivy_to_cpp target=test isolate=executable_runner build=false $<
+
+clean:
+	rm -f executable.o executable.cpp executable.h
+
+.PHONY: clean
