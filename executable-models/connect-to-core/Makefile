@@ -40,15 +40,16 @@ CORE_INCLUDES=-I $(CORE) \
               -I $(CORE)/lib/spdlog/include
 
 # use Ivy's version of z3
-IVY_INCLUDES=-I$(IVY)/ivy/include
-IVY_LIBDIRS=-I$(IVY)/ivy/lib
+IVY_INCDIR=$(IVY)/ivy/include
+IVY_LIBDIR=$(IVY)/ivy/lib
 
 executable: $(CORE_OBJS) executable.o
-	clang++ -g -o $@ $^ $(CORE_LIBDIRS) $(IVY_LIBDIRS) -lpthread -lsodium -l3rdparty -lxdrpp -lz3 -Wl,-rpath,$(IVY_LIBDIRS) -o executable
-	echo "don't forget to export LD_LIBRARY_PATH=$(IVY_LIBDIRS)"
+	@echo "\n\ndon't forget to build stellar core with --disable-tests\n\n"
+	clang++ -g -o $@ $^ $(CORE_LIBDIRS) -L $(IVY_LIBDIR) -lpthread -lsodium -l3rdparty -lxdrpp -lz3 -Wl,-rpath,$(IVY_LIBDIR) -o executable
+	@echo "\n\ndon't forget to export LD_LIBRARY_PATH=$(IVY_LIBDIR)\n\n"
 
 executable.o: executable.cpp executable.h Makefile
-	clang++ -c -O2 -g -std=c++17 -pthread $(CORE_INCLUDES) $(IVY_INCLUDES) -o $@ $<
+	clang++ -c -O2 -g -std=c++17 -pthread $(CORE_INCLUDES) -I $(IVY_INCDIR) -o $@ $<
 
 executable.cpp executable.h: executable.ivy Makefile
 	ivy_to_cpp target=test isolate=executable_runner build=false $<
