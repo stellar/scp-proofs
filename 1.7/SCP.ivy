@@ -16,7 +16,7 @@
 include order
 
 type value
-type node
+finite type node
 type nset # sets of nodes
 instance ballot : unbounded_sequence
 
@@ -90,7 +90,6 @@ object protocol = {
             received_vote_commit(N1,N2,B,V) := false;
             received_accept_prepare(N1,N2,B,V) := false;
             received_accept_commit(N1,N2,B,V) := false;
-            l2s_d(N:node) := intact(N); # we consider a finite set of intact nodes
         }
 
         action nomination_update(n:node, v:value) = {
@@ -343,7 +342,6 @@ object protocol = {
                 tactic skolemize
                 tactic l2s with
                 invariant ~(l2s_waiting & l2s_frozen) & ~(l2s_frozen & l2s_saved) & ~(l2s_waiting & l2s_saved)
-                invariant intact(N) -> l2s_d(N:node)
                 invariant l2s_d(_B) & l2s_d(_V) # NOTE: _B and _V are fixed individuals
 
                 # negated, skolemized goal:
@@ -383,7 +381,7 @@ object protocol = {
             showgoals
             tactic l2s with
             invariant ~(l2s_waiting & l2s_frozen) & ~(l2s_frozen & l2s_saved) & ~(l2s_waiting & l2s_saved)
-            invariant (intact(N) -> l2s_d(N:node)) & l2s_d(_B) & l2s_d(_V)
+            invariant l2s_d(_B) & l2s_d(_V)
             # NOTE: we don't need any information about l2s_a because we prove that we never stop waiting.
 
             # fairness of message delivery and consequences:
