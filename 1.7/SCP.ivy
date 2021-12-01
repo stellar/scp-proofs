@@ -90,7 +90,6 @@ object protocol = {
             received_vote_commit(N1,N2,B,V) := false;
             received_accept_prepare(N1,N2,B,V) := false;
             received_accept_commit(N1,N2,B,V) := false;
-
             l2s_d(N:node) := intact(N); # we consider a finite set of intact nodes
         }
 
@@ -312,10 +311,11 @@ object protocol = {
 
     isolate liveness_step_1 = {
 
-        # Here we prove the if a quorum of an intact node unanimously prepare (b,v), then eventually all intact nodes prepare (b,v). This follows from the cascade theorem.
+        # Here we prove the if a quorum of an intact node unanimously accept (b,v) as prepared, then eventually all intact nodes accept (b,v) as prepared. This follows from the cascade theorem.
 
         isolate additional_safety = { # NOTE: check with complete=fo
 
+            # if a quorum of an intact node unanimously accepted (b,v) as prepared and all accept-prepare messages between intact nodes have been received, then all intact nodes accept (b,v) as prepared
             invariant intact(N) & is_quorum(Q) & member(N,Q) & (forall N . intact(N) & member(N,Q) -> accepted_prepared(N,B,V))
                 & (forall N1,N2 . intact(N1) & intact(N2) & accepted_prepared(N1,B,V) -> received_accept_prepare(N2,N1,B,V)) -> forall N3 . intact(N3) -> accepted_prepared(N3,B,V)
 
@@ -337,6 +337,7 @@ object protocol = {
             temporal property [prop] (
                 # fair message delivery:
                   (forall N1,N2,B,V . intact(N1) & intact(N2) -> globally (accepted_prepared(N1,B,V) -> eventually received_accept_prepare(N2,N1,B,V)))
+                # implies: if a quorum of an intact node unanimously prepared (b,v), then eventually all intact nodes prepare (b,v).
                 ) -> forall Q,B,V,N . is_quorum(Q) & intact(N) & member(N,Q) -> globally ((forall N . intact(N) & member(N,Q) -> accepted_prepared(N,B,V)) -> eventually (forall N . intact(N) -> accepted_prepared(N,B,V)))
             proof {
                 tactic skolemize
