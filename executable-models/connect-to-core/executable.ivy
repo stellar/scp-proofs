@@ -549,12 +549,15 @@ object node(self:id_t) = {
     # their preconditions and trap violations. Ivy does not spontaneously call
     # any of these. It's not entirely clear we want to use these rather than
     # envelope-emit events as our spec, but we trap them for now.
-    action value_externalized(v:val_t)
-    action nominating_value(v:val_t)
-    action started_ballot_protocol(n:counter_t, x:val_t)
-    action accepted_ballot_prepared(n:counter_t, x:val_t)
-    action confirmed_ballot_prepared(n:counter_t, x:val_t)
-    action accepted_commit(n:counter_t, x:val_t)
+    #
+    # The word "import" here tells ivy that it needs to _check_ preconditions,
+    # rather than assuming them.
+    import action value_externalized(v:val_t)
+    import action nominating_value(v:val_t)
+    import action started_ballot_protocol(n:counter_t, x:val_t)
+    import action accepted_ballot_prepared(n:counter_t, x:val_t)
+    import action confirmed_ballot_prepared(n:counter_t, x:val_t)
+    import action accepted_commit(n:counter_t, x:val_t)
 
     # We have one generic "emit-an-envelope" action that conveys the
     # fact that there's a new envelope to consume in the history.
