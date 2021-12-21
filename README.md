@@ -1,20 +1,25 @@
+NOTE: For the old proofs, checkout commit `803b345`. The repository at this
+commit contains a full liveness proof. However, being written in Ivy 1.6, it
+has a lot of hacks. The current, newer version of this repository contains
+proofs written in Ivy 1.7.
+
 This is a repository containing formal proofs about the Stellar Consensus
 Protocol as described in the paper "Fast and secure global payments with
 Stellar" (SOSP 2019).
 
-With Isabelle/HOL, we formalize Federated Byzantine Agreement Systems (FBAS) and
-we prove the cascade theorem and that the union of two intact sets is intact.
+Using Isabelle/HOL, we formalize the theory of Federated Byzantine Agreement
+Systems (FBAS) and we prove two main results: the cascade theorem and that the
+union of two intact sets is intact.
 
-With Ivy, we formalize SCP in a high-level, non-executable specification, and
-we prove that intact sets never disagree (SCP's main safety property) and that,
-under some assumptions, every member of an intact set eventually commits
-a value (SCP's main liveness property).
+Using Ivy, we formalize SCP in a high-level, non-executable specification, and
+we prove that members of intertwined sets never disagree (SCP's main safety
+property) and some liveness properties.
 
 # Isabelle/HOL proofs
 
-FBA.thy contains a formalization of the notion of intact set. Informally, a set
-*I* is intact when (a) *I* is a quorum, and (b) even if all nodes outside *I*
-are faulty, any two quorums of members of *I* intersect.
+FBA.thy contains a formalization of the notion of intact set. Roughly speaking,
+a set *I* is intact when (a) *I* is a quorum, and (b) even if all nodes outside
+*I* are faulty, any two quorums of members of *I* intersect.
 
 We prove that:
 1. The cascade theorem holds: if `I` is an intact set, `Q` is a quorum of
@@ -23,7 +28,8 @@ We prove that:
 2. The union of two intersecting intact sets is intact. This implies that
    maximal intact sets are disjoint.
 
-Two major difference with the Stellar Whitepaper are that:
+Note that there two major differences compared to the treatment in the Stellar
+Whitepaper:
 1. We do not assume that the FBAS enjoys quorum intersection. Thus there may be
    disjoint intact sets that diverge but nevertheless remain internally safe
    and live. Point 2 above implies that maximal intact sets are disjoint, and
@@ -48,10 +54,14 @@ To browse and check FBA.thy with Isabelle, use [Isabelle
 2019](https://isabelle.in.tum.de/). The file `output/document.pdf` is a PDF
 version of FBA.thy.
 
+There is also a maintained version of the theory of FBAS and more in the
+Archive of Formal Proofs:
+<https://devel.isa-afp.org/entries/Stellar_Quorums.html>.
+
 ## Comments on the Isabelle/HOL proofs
 
 The proofs do not follow the presentation of the Stellar Whitepaper. They are
-simpler due to the reformulation of the notion of quorum. 
+simpler due to the reformulation of the notion of quorum.
 
 To prove the cascade theorem, we assume by contradiction that `I` is not
 a subset of `S` but no member of `S−I` is blocked by `S∩I`. In this situation,
@@ -63,7 +73,7 @@ a subset of `S`, and we have reached a contradiction.
 
 To prove that the union of two intersecting intact set is intact, we reason as
 follows. Take two intersecting intact sets `I₁` and `I₂`. First, note that
-`I₁∪I₂` is trivially a quorum, and thus we have quorum availability. 
+`I₁∪I₂` is trivially a quorum, and thus we have quorum availability.
 
 It remains to show that `I₁∪I₂` enjoys quorum intersection. Take a set `Q₁`
 that is a quorum of a member of `I₁` in the system projected on `I₁∪I₂` and
@@ -74,48 +84,19 @@ a quorum `Q₂` that is a quorum of a member of `I₂` in the system projected o
 is intact. Thus, by the quorum intersection property of intact sets, (a) `I₂`
 and `Q₁` intersect. Moreover, (b) both `Q₁` and `Q₂` are quorums in the system
 projected on `I₂`. Because `I₂` is intact, by the quorum intersection property,
-we get from (a) and (b) that `Q₁` and `Q₂` intersect in `I₂`, and we are done. 
+we get from (a) and (b) that `Q₁` and `Q₂` intersect in `I₂`, and we are done.
 
 # Ivy proofs
 
-This repository contains Ivy proofs of SCP's safety property (isolate
-protocol.safety in SCP-safety.ivy) and of SCP's liveness properties. The
-liveness proof consists of the supporting safety invariants proved in
-`SCP-safety.ivy` (isolates `protocol.safety_2` and `protocol.safety_3`) and
-`SCP-safety-2.ivy`, and lemmas proved in `SCP-liveness-cascade.ivy`,
-`SCP-liveness-prepare.ivy`, and `SCP-liveness-3.ivy`.
-
-* In `SCP-liveness-cascade.ivy` we prove that, in an arbitrary given ballot, if
-  all intact nodes vote to prepare the same value `v` and the ballot lasts long
-  enough, then all intact nodes confirm `v` as committed.
-* In `SCP-liveness-prepare.ivy`, we prove
-  that if all intact nodes agree on what is confirmed prepared before a ballot
-  `b`, and their nomination output is the same, then they all vote to propose
-  the same value in `b`.
-* In `SCP-liveness-3.ivy` we prove that if intact nodes all prepare the same
-  value in a long-enough ballot, then all intact nodes confirm the value as
-  committed by the end of the ballot.
-
-As we discuss below, together, those three lemmas show that SCP is guaranteed
-to produce a decision if given two long-enough consecutive ballots in which all
-quorums of intact nodes are timely.
-
-# Installing and using Ivy
-
-To check the Ivy proofs, use the following fork of Ivy, developed by Oded
-Padon: [Oded's fork](https://github.com/odedp/ivy).
-
-Clone [Oded's fork](https://github.com/odedp/ivy), create a Python 2.7
-virtualenv to work in, install the z3-solver package with pip, and then run
-`python setup.py install`. To check `my_file.ivy`, run `ivy_check complete=fo
-my_file.ivy`. To set the random seed to something random (using bash on linux):
-`ivy_check complete=fo seed=$RANDOM my_file.ivy`.
+This repository contains a proof of SCP's safety property in Ivy (isolate
+protocol.intertwined_safety in SCP.ivy) and of some of SCP's liveness properties.
 
 # Background material to understand the model and proofs
 
 To understand the model and safety proofs: Padon, Oded, et al. "Paxos made EPR:
 decidable reasoning about distributed protocols." Proceedings of the ACM on
 Programming Languages 1.OOPSLA (2017): 108.
+Available [here](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&cad=rja&uact=8&ved=2ahUKEwjp9Z3xuvX0AhXKGTQIHbfEBEIQFnoECA4QAw&url=https%3A%2F%2Farxiv.org%2Fabs%2F1710.07191&usg=AOvVaw0ffPhJjdMi3okPA41gShmn)
 
 To understand the liveness proofs:
 
@@ -132,13 +113,10 @@ To understand the liveness proofs:
 
 First, the proofs make statements about a model of SCP written in the Ivy
 language, and not about SCP's implementation or SCP's description in the
-Whitepaper. This model may not reflect what the reader think SCP is (and what
-SCP is may be open to interpretation since there is not agreed-upon formal
-specification). One can find the SCP model in all the Ivy files in the
-repository (it is duplicated in several files for technical reasons, but when
-Ivy's liveness support will be more mature the model should appear only in one
-place). This model could in principle be taken as the formal specification of
-SCP.
+Stellar Whitepaper. This model may not reflect what the reader think SCP is
+(and what SCP is may be open to interpretation since there is not agreed-upon
+formal specification). The model in `SCP.ivy` could in principle be taken as
+the formal specification of SCP.
 
 **Caveat 1**: Discrepancies between the SCP model and any other notion of what
 SCP is would imply that the statements proved with Ivy may not apply to that
@@ -147,35 +125,31 @@ other notion of what SCP is.
 The model consists of an initial state and a collection of actions, which are
 atomic steps that update the global state of the system. Actions model what
 nodes do upon receiving messages or upon timers firing. Each action consists of
-preconditions (expressed using `assume` statements) and state updates. An
+preconditions (expressed using `require` statements) and state updates. An
 execution of the model is a sequence of global states, starting with the
-initial state, and such that each state is obtained from the preceding state by
-applying an action whose preconditions are satisfied. This is an instance of
-Lamport's Standard Model, used e.g. in TLA+, which Lamport discusses in his
-Turing Award lecture.
+initial state, and such that each successive state is obtained from the
+preceding state by applying an action whose preconditions are satisfied. This
+is an instance of Lamport's Standard Model, used e.g. in TLA+, which Lamport
+discusses in his Turing Award lecture.
 
 Preconditions and state updates are specified using First-Order Logic formulas.
-By convention, all unbound upper-case variables are taken to be universally
-quantified. For more details about specifying protocols in Ivy (and proving
-their safety), see the [Ivy tutorial](https://microsoft.github.io/ivy/).
+Note that, by convention, all free upper-case variables are taken to be
+universally quantified. For more details about specifying protocols in Ivy (and
+proving their safety), see the [Ivy tutorial](https://microsoft.github.io/ivy/).
 
 **Caveat 2:** It is easy to write a model that does nothing, e.g. because the
-preconditions of the actions are too strong or even contradictory, and then
-prove that there is no safety violation. Such a proof would obviously be
-meaningless. In fact, the `change_ballot` action had a contradictory assumption
-at some point during the development of the SCP model, which was latter fixed
-in commit
-[3a403d0](https://github.com/stellar/scp-proofs/commit/3a403d09e85097dafef96f5639f619c4f123a99f).
-One way to ensure that the model does do something is to prove liveness
-properties, e.g. than in every execution, every intact node eventually decides.
-We discuss the liveness of SCP below.
+preconditions of the actions are too strong or even contradictory, and, in this
+case, any proof if meaningless. One way to ensure that the model does do
+something is to prove liveness properties. For example, we might want to prove
+that, in every eventually synchronous execution, every intact node eventually
+decides. We discuss the liveness of SCP below.
 
 ### Abstractions
 
 The SCP model abstracts over several aspects of SCP. First, there is no notion
-of slice in the model. Instead, we consider a set of nodes which each have
-a set of quorums and a notion of blocking set. We then define intertwined and
-intact sets using the following axioms:
+of quorum slice in the model. Instead, we consider a set of nodes which each
+have a set of quorums and a notion of blocking set. We then define intertwined
+and intact sets using the following axioms:
 1. The intersection of two quorums of intertwined nodes contains a well-behaved
    node.
 2. The intersection of two quorums of intact nodes contains an intact node.
@@ -191,12 +165,12 @@ intact sets using the following axioms:
    `FBA.thy`.
 
 **Caveat 3**: If those axioms are inconsistent (i.e. lead to a contradiction
-when taken together), the proofs mean nothing. We verified 4 and 5 in
+when taken together), the proofs are meaningless. We verified 4 and 5 in
 Isabelle/HOL, but there is no mechanically-checked link between the Ivy axioms
 and the Isabelle/HOL theory. Thus there is still the possibility that of
-a typo. 
+a typo.
 
-**TODO**: It might be possible to use Ivy to check that the axioms have
+**TODO**: It should be possible to use Ivy to check that the axioms have
 a model, which would rule out any inconsistency.
 
 Abstracting slices away may see like a bold step. However, the model still
@@ -205,15 +179,10 @@ a federated Byzantine agreement system, i.e. the fact that the notion of quorum
 is different for each participant. What is not captured by the model includes
 the fact that quorums are discovered dynamically (nodes know all their quorums
 upfront in the model) and that quorums might change during execution as nodes
-adjust their slices. However, as argued in the Stellar Whitepaper, the safety
-of SCP in the case in which quorums change dynamically is no worse than the
-safety of the case in which slices do not change and a node's slices are taken
-to be all the slices that it ever uses in the dynamic case. Thus the proof
-still gives some assurance about the dynamic case.
+adjust their slices (quorums are fixed upfront in the model).
 
 Second, the model does not specify the nomination protocol. Instead, we assume
-that nomination can return arbitrary values (for proving liveness, we add
-temporal assumptions about nomination; see the liveness section).
+that nomination can return arbitrary values, which is sound.
 
 Finally, there is no notion of real-time in the model. Thus we cannot  make any
 statements about the amount of time that things take to happen. Instead, in the
@@ -228,12 +197,12 @@ protocol, if we could reason about real-time properties.
 ## Safety
 
 We prove that intertwined nodes never disagree by providing a collection of
-conjectures which, together with the safety property to prove, form an
+invariants which, together with the safety property to prove, form an
 inductive invariant (i.e. they hold in the initial state and are preserved by
 every action).
 
 The key invariants are:
-1. A well-behaved node does to accept `(b,v)` as committed unless it confirmed
+1. A well-behaved node does not accept `(b,v)` as committed unless it confirmed
    `(b,v)` as prepared.
 2. A well-behaved node does not accept contradictory statements (where `commit
    (b,v)` and `prepare (b',v')` are contradictory when `b < b'` and `v ≠ v'`.
@@ -242,113 +211,82 @@ The key invariants are:
 4. A well-behaved node does not accept different values as prepared in the same
    ballot.
 
-Now suppose that `v` and `v'` are confirmed committed in ballots `n` and `n'`,
-with `n < n'`. By Invariant 1 and Invariant 3, there is a quorum `Q` of an
-intertwined node whose well-behaved members all accepted `(n',v')` as prepared.
-Thus, by Invariant 2, no well-behaved member of `Q` ever accepts `(n,v)` as
-committed. Thus, by Invariant 3 and Quorum Intersection, no intertwined node
-confirmed `(n,v)` as committed, which is a contradiction.
+Given those invariants, suppose that `v` and `v'` are confirmed committed in
+ballots `n` and `n'`, with `n < n'`. By Invariant 1 and Invariant 3, there is
+a quorum `Q` of an intertwined node whose well-behaved members all accepted
+`(n',v')` as prepared. Thus, by Invariant 2, no well-behaved member of `Q` ever
+accepts `(n,v)` as committed. Thus, by Invariant 3 and Quorum Intersection, no
+intertwined node confirmed `(n,v)` as committed, which is a contradiction.
 
+Using the auxiliary conjectures present in the `safety` isolate in
+`SCP-safety.ivy`, Ivy reaches the same conclusion automatically and
+successfully validates that the safety property holds.
 
-Using the auxiliary conjectures present in the `safety` isolate in `SCP-safety.ivy`, 
-Ivy reaches the same conclusion automatically and successfully validates that
-the safety property holds.
+## Liveness
 
-## Liveness 
- 
-The liveness properties of SCP follow from the cascade theorem and from a key
-safety property: (P1) if there is a quorum-of-intact `Q` whose intact members
-all vote to commit `(b,v)`, then no value different from `v` is accepted as
-prepared in later ballots. Property P1 rules out scenarios where nodes would
-not be able to accept any new statements because past accepted contradictory
-statements prevent them from accepting any new statement. We prove Property P1
-in the isolate `safety_2` of `SCP-safety.ivy`. Relying on Property P1, we
-formally prove two liveness properties that we now discuss.
+We would like to prove that SCP guarantees that, under eventual synchrony,
+every intact node eventually decides. Unfortunately, this does not hold, and
+SCP guarantees the following, weaker liveness property: if the system is
+eventually synchronous and non-intact nodes eventually stop taking steps, then
+every intact node eventually decides.
 
-In what follows, we always assume as a baseline that communication between
-intact nodes is reliable (i.e. messages are never lost) but can take an
-arbitrary amount of time.
+To prove the liveness property, we can proceed in two steps.
+* L1: by the end of a long-enough synchronous ballot in which non-intact nodes
+  do not take steps, every intact node agrees on the highest confirmed-prepared
+  value.
+* L2: if a quorum unanimously votes to prepare a value `v` during a long-enough
+  synchronous ballot, then every intact node decides `v` by the end of the
+  ballot.
 
-Ballot-based protocols like SCP are usually live assuming a variant of eventual
-synchrony. That, we assume that, eventually, the system stabilizes in some way.
-For example, we might assume that the communication delay between intact nodes
-eventually becomes bounded by a constant. Given such an assumption, one way to
-prove the liveness of ballot-based protocols like SCP is to first prove that,
-eventually, the ballot-synchronization mechanism simulates a synchronous system
-in which intact nodes go from ballot to ballot in lock-steps and all receive
-the same messages in a given ballot. Then, assuming that ballots eventually
-become synchronous, we prove that the protocol terminates. This is roughly the
-approach pioneered by Dwork, Lynch, and Stockemeyer in their seminal work
-"Consensus in the presence of partial synchronony", and we also take this
-approach.
+Note that, if intact nodes agree that the highest confirmed-prepared value is
+`v`, then they all vote for `v`. Thus, once ballots become synchronous and
+Byzantine nodes stop taking step, properties L1 and L2 together imply that all
+intact nodes decide.
 
-We formally prove two liveness properties L1 and L2 that depend on assumptions
-about the ballot-synchronization protocol; then, we informally argue that,
-assuming that the ballot-synchronization protocol eventually ensures synchrony,
-L1 and L2 guarantee that after two synchronous ballots all intact nodes have
-confirmed a value committed. We do not formally analyse the
-ballot-synchronization protocol. Doing so would require reasoning about
-real-time properties involving message-propagation delay, timeout values, etc.
-which is not possible with the first-order model of SCP that we use here. See
-the SOSP paper for an informal discussion of the ballot-synchronization
-protocol.
+Let us know informally argue why properties L1 and L2 hold. In each cases, the
+main threat is the fact nodes do not accept contradictory values, and this
+could block progress. In both cases, we rule out progress being blocked in this
+way using additional invariants proved in the isolate
+`protocol.additional_safety`.
 
-The first property we prove is that, (L1) if there is ever a ballot `b1` such that
-(a) all intact nodes vote to prepare the same value `v` in `b1` and (b) `b1` lasts long
-enough, then all intact nodes confirm `v` as committed in `b1` (regardless of
-what faulty nodes do). This is not as trivial as it may seem because a node
-accepts a new statement only if it has not already accepted anything
-contradictory. Thus, contradictory accepted statements could prevent `v` from
-being confirmed committed in `b1`. To rule out this possibility, we first prove
-that if all intact nodes vote to prepare the same value `v` in `b1`, then no
-intact node has or ever accepts `commit (b,v)` where `v≠v1` and `b≤b1`. In
-other words, `v1` is never contradicted in ballots preceding `b1`. This holds
-because, if `(b,v)`, with `b≤v1` and `v≠v1` is accepted as committed, then
-there is a quorum-of-intact `Q` whose intact members all voted to commit
-`(b,v)` before leaving ballot `b`. Therefore, by Property P1, no other value
-can be confirmed as prepared in ballots higher than `b`, and thus one intact node
-must have confirmed `(b,v)` as prepared before entering `b1`. Therefore, at least
-one intact node has `(b,v)` as highest confirmed prepared value when entering
-`b1`, and this node must therefore vote to prepare `v` in `b1`. This
-contradicts the assumption that all intact nodes vote to prepare `v1` where
-`v1≠v`. Now that we have established that `prepare (b1,v1)` cannot be
-contradicted, it should be clear that given enough time for all messages sent
-from intact nodes to intact nodes to be delivered, `(b1,v1)` is eventually
-confirmed as committed (note that there is no need for the cascade theorem for
-this, because the set of intact nodes is a quorum for all intact nodes).
-We formally prove Property L1 in `SCP-liveness-3.ivy`.
+To see why property L1 holds, assume that an intact node has confirmed `(b,v)`
+prepared during a long-enough synchronous ballot. Then, as we prove in `inv2`
+in isolate `protocol.additional_safety`, no contradictory statement is ever
+accepted by intact nodes. Thus, other intact nodes are never prevented from
+accepting `(b,v)` as prepared, and the Cascade Theorem ensures that, given
+enough communication, every intact node confirms `(b,v)` as prepared. Thus, if
+ballot `b` is long enough, evey intact node confirms `(b,v)` as prepared by the
+end of the ballot.
 
-It remains to show if and under what circumstances we can guarantee that there
-will come a ballot `b1` such that all intact nodes vote to prepare the same
-value in `b1`. Using the cascade theorem and Property P1, we show that (L2)
-once an intact node accepts a value `v` as prepared in `b0`, then all intact
-nodes eventually accept it as prepared and then commit it prepared. The key for
-this proof is showing that the cascading effect is not blocked by contradictory
-accepted statements, again using Property P1. The contrapositive of Property P1
-is that if `prepare (b0,v)` is confirmed, then no value `v'≠v` can be accepted
-as committed in ballots lower than `b0`. Therefore, once an intact nodes
-accepts a value `v` as prepared in `b0`, `prepare (b0,v)` cannot be
-contradicted and, by the cascade theorem, all intact nodes eventually accept it
-as prepared and then commit it prepared.
-We formally prove Property L2 in `SCP-liveness-cascade.ivy`.
+To see  why property L2 holds, assume that every intact node votes to prepare
+the same value `v` during a long-enough synchronous ballot `b`. Then, as we
+prove in `inv1` in isolate `protocol.additional_safety`, no contradictory
+statement is ever accepted by intact nodes. Thus, given enough communication,
+nothing prevents value `v` from being accepted prepared, then confirmed
+prepared, then accepted committed, and finally confirmed committed by all
+intact nodes. Thus, if ballot `b` is long enough, every intact node confirms
+`(b,v)` as prepared by the end of the ballot.
 
-Liveness Property L2 shows that, if, eventually, no new values are ever
-confirmed prepared by any intact nodes, then, eventually, all intact nodes
-agree on what is confirmed prepared. Thus, barring interference from non-intact
-nodes, if ballots become synchronous and keep increasing in duration, there
-will come a ballot that is long enough enough for all intact nodes to agree on
-what is confirmed prepared by the end of the ballot. It easily follows,
-assuming that nomination has converged, that all intact nodes vote to prepare
-the same value in the next ballot (this is proved formally in
-`SCP-liveness-prepare.ivy`), and that, by Liveness Property L1, all intact
-nodes confirm a value committed in the next ballot.
+### What liveness properties are proved in Ivy?
 
-Unfortunately, non-intact nodes can always interfere right before the end of
+An old version of this repository (commit `803b345`) contains a full liveness
+proof. However, this old proof is written in Ivy 1.6 and contains many hacks.
+The current repository uses Ivy 1.7 and contains cleaner liveness proofs.
+However, we have so far only ported the proof of the following statement: if
+a quorum of an intact node unanimously accepts `(b,v)` as prepared, then
+eventually all intact nodes accept `(b,v)` as prepared. This roughly
+corresponds to property L1.
+
+### Liveness in practice
+
+Unfortunately, Byzantine nodes can always interfere right before the end of
 a ballot and cause disagreement on what is confirmed prepared among intact
-nodes: a non-intact node can always withhold an "accept prepare" message right
-until the end of a ballot (either because it is faulty or because it has bad
-timing) and complete a quorum just before the ballot ends, and thereby cause
-some intact nodes to confirm the corresponding value as prepared while others
-do not. Thus, to ensure that all intact nodes vote to prepare the same
-value in the next ballot, intact nodes must adjust their slices to make sure
-that no faulty or otherwise untimely node remain in any of their quorums.
+nodes and make L1 fail. More precisely, a Byzantine node can always withhold an
+"accept prepare" message right until the end of a ballot (either because it is
+faulty or because it has bad timing) and complete a quorum just before the
+ballot ends, and thereby cause some intact nodes to confirm the corresponding
+value as prepared while others do not.
+
+In practice, to ensure that all intact nodes vote to prepare the same value in
+the next ballot, intact nodes must adjust their slices to make sure that no
+faulty or otherwise untimely node remain in any of their quorums.

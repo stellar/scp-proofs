@@ -259,8 +259,8 @@ object protocol = {
         # Here we prove additional safety properties which we later use in the liveness proof
         # NOTE: at the moment, most of those are unused
 
-        # A value unanimously voted prepared cannot be contradicted. We use this to prove that, in a long-enough ballot in which all intact nodes prepare the same value, all intact nodes confirm that value as committed (because, as per the invariant, its progress cannot be stopped by a contradicting accepted-committed value).
-        # NOTE: this is an interesting property of the protocol, i.e. the outcome becomes univalent as soon as a quorum unanimously prepares a value.
+        # A value unanimously voted prepared cannot be contradicted. We can use this to prove that, in a long-enough ballot in which all intact nodes prepare the same value, all intact nodes confirm that value as committed (because, as per the invariant, its progress cannot be stopped by a contradicting accepted-committed value).
+        # NOTE: this is an interesting property of the protocol, i.e. the outcome becomes univalent as soon as a quorum unanimously votes to prepare a value.
         invariant [inv1] (forall N . intact(N) -> voted_prepared(N,B,V)) & intact(N) & accepted_committed(N,B2,V2) & B2 < B -> V = V2
 
         # An accepted prepared value cannot be contradicted. We use this to prove that once an intact nodes confirms (b,v) as prepared, the cascade effect occurs (because (b,v) is never contradicted) and eventually all intact nodes confirm.
