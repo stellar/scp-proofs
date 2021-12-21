@@ -115,10 +115,10 @@ docker-compose run ivy-check
 
 First, the proofs make statements about a model of SCP written in the Ivy
 language, and not about SCP's implementation or SCP's description in the
-Stellar Whitepaper. This model may not reflect what the reader think SCP is
-(and what SCP is may be open to interpretation since there is not agreed-upon
-formal specification). The model in `SCP.ivy` could in principle be taken as
-the formal specification of SCP.
+Stellar Whitepaper. This model may not reflect what the reader think SCP is,
+and what SCP is may be open to interpretation since there is not agreed-upon
+formal specification. The model in `SCP.ivy` could in principle be taken as the
+formal specification of SCP.
 
 **Caveat 1**: Discrepancies between the SCP model and any other notion of what
 SCP is would imply that the statements proved with Ivy may not apply to that
@@ -141,17 +141,20 @@ proving their safety), see the [Ivy tutorial](https://microsoft.github.io/ivy/).
 
 **Caveat 2:** It is easy to write a model that does nothing, e.g. because the
 preconditions of the actions are too strong or even contradictory, and, in this
-case, any proof if meaningless. One way to ensure that the model does do
+case, any proof is meaningless. One way to ensure that the model does do
 something is to prove liveness properties. For example, we might want to prove
 that, in every eventually synchronous execution, every intact node eventually
 decides. We discuss the liveness of SCP below.
 
 #### Abstractions
 
-The SCP model abstracts over several aspects of SCP. First, there is no notion
-of quorum slice in the model. Instead, we consider a set of nodes which each
-have a set of quorums and a notion of blocking set. We then define intertwined
-and intact sets using the following axioms:
+The SCP model abstracts over several aspects of SCP.
+
+#### Quorum slices
+
+There is no notion of quorum slice in the model. Instead, we consider a
+set of nodes which each have a set of quorums and a notion of blocking set. We
+then define intertwined and intact sets using the following axioms:
 1. The intersection of two quorums of intertwined nodes contains a well-behaved
    node.
 2. The intersection of two quorums of intact nodes contains an intact node.
@@ -183,17 +186,27 @@ the fact that quorums are discovered dynamically (nodes know all their quorums
 upfront in the model) and that quorums might change during execution as nodes
 adjust their slices (quorums are fixed upfront in the model).
 
-Second, the model does not specify the nomination protocol. Instead, we assume
-that nomination can return arbitrary values, which is sound.
+#### Execution model
 
-Finally, there is no notion of real-time in the model. Thus we cannot  make any
-statements about the amount of time that things take to happen. Instead, in the
-liveness properties and proofs, we make statements using Linear-Time Temporal
-Logic (LTL), which allows to express that something eventually happens without
-giving any bound on the actual time at which it will happen. As we explain in
-the liveness section, some of the liveness assumptions that we make could be
-proved from simpler assumptions, thereby increasing our confidence in the
-protocol, if we could reason about real-time properties.
+There is no notion of real-time in the model. Instead, messages are delivered
+at non-deterministically and an armed timer can fire non-deterministically at
+any point. Thus we cannot make any statements about the amount of time that it
+takes to make certain things happen.
+
+However, in practice, liveness depends on having synchronized clocks and a
+network delay commensurate with timer values. For the liveness proofs, since we
+cannot talk about real time, we instead make assumptions using Linear-Time Temporal
+Logic (LTL). For example, we assume that every message sent from an intact node
+to an intact node is eventually delivered. Moreover, for a full liveness proof,
+we would need to assume that there exists a ballot `b` after which the system
+becomes synchronous (i.e.every message sent by an intact node to an intact node
+is received in the same ballot) and no non-intact nodes take any steps.
+
+#### Nomination
+
+Finally, the model does not specify the nomination protocol. Instead, we assume
+that nomination can produce arbitrary values, which is a sound
+over-approximation.
 
 ### Safety
 
@@ -231,7 +244,10 @@ SCP guarantees the following, weaker liveness property: if the system is
 eventually synchronous and non-intact nodes eventually stop taking steps, then
 every intact node eventually decides.
 
-To prove the liveness property, we can proceed in two steps.
+More precisely, let us now sketch a proof that, after two consecutive
+synchronous ballots that are long enough, every intact node decides.
+
+To prove the property, we first prove the following two sub-properties:
 * L1: by the end of a long-enough synchronous ballot in which non-intact nodes
   do not take steps, every intact node agrees on the highest confirmed-prepared
   value.
