@@ -91,7 +91,16 @@ we get from (a) and (b) that `Q₁` and `Q₂` intersect in `I₂`, and we are d
 This repository contains a proof of SCP's safety property in Ivy (isolate
 protocol.intertwined_safety in SCP.ivy) and of some of SCP's liveness properties.
 
-# Background material to understand the model and proofs
+## Running the proofs
+
+To run the proof (that is, to have Ivy check them), run the following commands
+(on Linux) from the root of this repository:
+```
+docker-compose build ivy-check
+docker-compose run ivy-check
+```
+
+## Background material to understand the model and proofs
 
 To understand the model and safety proofs: Padon, Oded, et al. "Paxos made EPR:
 decidable reasoning about distributed protocols." Proceedings of the ACM on
@@ -107,9 +116,9 @@ To understand the liveness proofs:
   (2017). Reducing liveness to safety in first-order logic. Proceedings of the
   ACM on Programming Languages, 2(POPL), 26.
 
-# What is proved with Ivy?
+## What is proved with Ivy?
 
-## The model
+### The model
 
 First, the proofs make statements about a model of SCP written in the Ivy
 language, and not about SCP's implementation or SCP's description in the
@@ -144,7 +153,7 @@ something is to prove liveness properties. For example, we might want to prove
 that, in every eventually synchronous execution, every intact node eventually
 decides. We discuss the liveness of SCP below.
 
-### Abstractions
+#### Abstractions
 
 The SCP model abstracts over several aspects of SCP. First, there is no notion
 of quorum slice in the model. Instead, we consider a set of nodes which each
@@ -193,8 +202,7 @@ the liveness section, some of the liveness assumptions that we make could be
 proved from simpler assumptions, thereby increasing our confidence in the
 protocol, if we could reason about real-time properties.
 
-
-## Safety
+### Safety
 
 We prove that intertwined nodes never disagree by providing a collection of
 invariants which, together with the safety property to prove, form an
@@ -222,7 +230,7 @@ Using the auxiliary conjectures present in the `safety` isolate in
 `SCP-safety.ivy`, Ivy reaches the same conclusion automatically and
 successfully validates that the safety property holds.
 
-## Liveness
+### Liveness
 
 We would like to prove that SCP guarantees that, under eventual synchrony,
 every intact node eventually decides. Unfortunately, this does not hold, and
@@ -267,7 +275,7 @@ prepared, then accepted committed, and finally confirmed committed by all
 intact nodes. Thus, if ballot `b` is long enough, every intact node confirms
 `(b,v)` as prepared by the end of the ballot.
 
-### What liveness properties are proved in Ivy?
+#### What liveness properties are proved in Ivy?
 
 An old version of this repository (commit `803b345`) contains a full liveness
 proof. However, this old proof is written in Ivy 1.6 and contains many hacks.
@@ -277,7 +285,7 @@ a quorum of an intact node unanimously accepts `(b,v)` as prepared, then
 eventually all intact nodes accept `(b,v)` as prepared. This roughly
 corresponds to property L1.
 
-### Liveness in practice
+#### Liveness in practice
 
 Unfortunately, Byzantine nodes can always interfere right before the end of
 a ballot and cause disagreement on what is confirmed prepared among intact

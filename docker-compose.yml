@@ -3,4 +3,4 @@ services:
   ivy-check:
     build: .
     volumes:
-      - ./:/home/user/scp-proofs:rw
+      - ./:/home/user/scp-proofs:ro

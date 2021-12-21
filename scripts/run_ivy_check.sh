@@ -2,6 +2,6 @@
 
 cd ~/ivy
 git fetch -q
-git checkout -q c740b2742508beb6d8e22fbab2f13babf117db8f # does not work with most recent master
+git checkout -q f0a63852a8bb960a8bb52aace1902263ed84fd33 # known to work with this version of Ivy
 cd ~/scp-proofs/
 ivy_check complete=fo $1
