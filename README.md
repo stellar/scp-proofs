@@ -1,8 +1,3 @@
-NOTE: For the old proofs, checkout commit `803b345`. The repository at this
-commit contains a full liveness proof. However, being written in Ivy 1.6, it
-has a lot of hacks. The current, newer version of this repository contains
-proofs written in Ivy 1.7.
-
 This is a repository containing formal proofs about the Stellar Consensus
 Protocol as described in the paper "Fast and secure global payments with
 Stellar" (SOSP 2019).
@@ -14,6 +9,11 @@ union of two intact sets is intact.
 Using Ivy, we formalize SCP in a high-level, non-executable specification, and
 we prove that members of intertwined sets never disagree (SCP's main safety
 property) and some liveness properties.
+
+NOTE: For the old proofs, checkout [commit 803b345](https://github.com/stellar/scp-proofs/tree/803b345e3156f70eb1e24f522c50517161731cd0) . The repository at this
+commit contains a full liveness proof. However, being written in Ivy 1.6, it
+has a lot of hacks. The current, newer version of this repository contains
+proofs written in Ivy 1.7.
 
 # Isabelle/HOL proofs
 
@@ -102,19 +102,12 @@ docker-compose run ivy-check
 
 ## Background material to understand the model and proofs
 
-To understand the model and safety proofs: Padon, Oded, et al. "Paxos made EPR:
-decidable reasoning about distributed protocols." Proceedings of the ACM on
-Programming Languages 1.OOPSLA (2017): 108.
-Available [here](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&cad=rja&uact=8&ved=2ahUKEwjp9Z3xuvX0AhXKGTQIHbfEBEIQFnoECA4QAw&url=https%3A%2F%2Farxiv.org%2Fabs%2F1710.07191&usg=AOvVaw0ffPhJjdMi3okPA41gShmn)
+* To understand the model and safety proofs:
+  * Padon, Oded, et al. *Paxos made EPR: decidable reasoning about distributed protocols.* Proceedings of the ACM on Programming Languages 1.OOPSLA (2017): 108. (available [on arXiv](https://arxiv.org/abs/1710.07191)).
 
-To understand the liveness proofs:
-
-* Padon, Oded, et al. "Temporal prophecy for proving temporal properties of
-  infinite-state systems." 2018 Formal Methods in Computer Aided Design
-  (FMCAD). IEEE, 2018.
-* Padon, O., Hoenicke, J., Losa, G., Podelski, A., Sagiv, M., & Shoham, S.
-  (2017). Reducing liveness to safety in first-order logic. Proceedings of the
-  ACM on Programming Languages, 2(POPL), 26.
+* To understand the liveness proofs:
+  * Padon, Oded, et al. *Temporal prophecy for proving temporal properties of infinite-state systems.* 2018 Formal Methods in Computer Aided Design (FMCAD). IEEE, 2018.
+  * Padon, O., Hoenicke, J., Losa, G., Podelski, A., Sagiv, M., & Shoham, S. (2017). *Reducing liveness to safety in first-order logic*. Proceedings of the ACM on Programming Languages, 2(POPL), 26.
 
 ## What is proved with Ivy?
 
