@@ -290,10 +290,9 @@ intact nodes. Thus, if ballot `b` is long enough, every intact node confirms
 An old version of this repository (commit `803b345`) contains a full liveness
 proof. However, this old proof is written in Ivy 1.6 and contains many hacks.
 The current repository uses Ivy 1.7 and contains cleaner liveness proofs.
-However, we have so far only ported the proof of the following statement: if
-a quorum of an intact node unanimously accepts `(b,v)` as prepared, then
-eventually all intact nodes accept `(b,v)` as prepared. This roughly
-corresponds to property L1.
+However, we have so far only ported the proof of the following statement: if an
+intact node confirms `(b,v)` as prepared, then eventually all intact nodes
+confirm `(b,v)` as prepared. This implies property L1.
 
 #### Liveness in practice
 
