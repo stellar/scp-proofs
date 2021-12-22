@@ -144,7 +144,7 @@ preconditions of the actions are too strong or even contradictory, and, in this
 case, any proof is meaningless. One way to ensure that the model does do
 something is to prove liveness properties. For example, we might want to prove
 that, in every eventually synchronous execution, every intact node eventually
-decides. We discuss the liveness of SCP below.
+confirms a value as committed. We discuss the liveness of SCP below.
 
 #### Abstractions
 
@@ -239,31 +239,32 @@ successfully validates that the safety property holds.
 ### Liveness
 
 We would like to prove that SCP guarantees that, under eventual synchrony,
-every intact node eventually decides. Unfortunately, this does not hold, and
-SCP guarantees the following, weaker liveness property: if the system is
-eventually synchronous and non-intact nodes eventually stop taking steps, then
-every intact node eventually decides.
+every intact node eventually confirms a value as committed. Unfortunately, this
+does not hold, and SCP guarantees the following, weaker liveness property: if
+the system is eventually synchronous and non-intact nodes eventually stop
+taking steps, then every intact node eventually confirms a value as committed.
 
 More precisely, let us now sketch a proof that, after two consecutive
-synchronous ballots that are long enough, every intact node decides.
+synchronous ballots that are long enough, every intact node confirms a value as
+committed.
 
-To prove the property, we first prove the following two sub-properties:
+This liveness property follows from the following two sub-properties:
 * L1: by the end of a long-enough synchronous ballot in which non-intact nodes
   do not take steps, every intact node agrees on the highest confirmed-prepared
   value.
 * L2: if a quorum unanimously votes to prepare a value `v` during a long-enough
-  synchronous ballot, then every intact node decides `v` by the end of the
-  ballot.
+  synchronous ballot, then every intact node confirms `v` as committed by the
+  end of the ballot.
 
-Note that, if intact nodes agree that the highest confirmed-prepared value is
-`v`, then they all vote for `v`. Thus, once ballots become synchronous and
-Byzantine nodes stop taking step, properties L1 and L2 together imply that all
-intact nodes decide.
+Now why do L1 and L2 imply the liveness property? Note that, if intact nodes
+agree that the highest confirmed-prepared value is `v`, then they all vote for
+`v`. Thus, once ballots become synchronous and Byzantine nodes stop taking
+step, properties L1 and L2 together imply that all intact nodes decide.
 
 Let us know informally argue why properties L1 and L2 hold. In each cases, the
-main threat is the fact nodes do not accept contradictory values, and this
-could block progress. In both cases, we rule out progress being blocked in this
-way using additional invariants proved in the isolate
+main obstacle to liveness is the fact that nodes do not accept contradictory
+values, and this could block progress. In both cases, we rule out progress
+being blocked in this way using additional invariants proved in the isolate
 `protocol.additional_safety`.
 
 To see why property L1 holds, assume that an intact node has confirmed `(b,v)`
@@ -282,7 +283,7 @@ statement is ever accepted by intact nodes. Thus, given enough communication,
 nothing prevents value `v` from being accepted prepared, then confirmed
 prepared, then accepted committed, and finally confirmed committed by all
 intact nodes. Thus, if ballot `b` is long enough, every intact node confirms
-`(b,v)` as prepared by the end of the ballot.
+`(b,v)` as committed by the end of the ballot.
 
 #### What liveness properties are proved in Ivy?
 
