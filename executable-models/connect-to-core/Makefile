@@ -37,6 +37,7 @@ CORE_INCLUDES=-I $(CORE) \
               -I $(CORE)/src \
               -I $(CORE)/lib/xdrpp \
               -I $(CORE)/lib/fmt/include \
+              -I $(CORE)/lib/libsodium/src/libsodium/include \
               -I $(CORE)/lib/spdlog/include
 
 # use Ivy's version of z3
