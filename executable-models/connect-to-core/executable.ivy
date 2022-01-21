@@ -356,6 +356,10 @@ object network = {
             }
             else
             {
+                // TODO: Technically, an empty cb should _cancel_ the timer.
+                // However, the test seems to work sufficiently well if we just ignore it,
+                // and cancelling the timer may get complicated,
+                // so we'll leave it as is for now.
                 CLOG_INFO(SCP, "TestSCP::setupTimer ignores an empty cb");
             }
         }
