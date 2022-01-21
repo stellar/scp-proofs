@@ -595,7 +595,21 @@ object node(self:id_t) = {
                         c_counter:counter_t, h_counter:counter_t)
 
     before emit_prepare {
-        require exists S:nodeset_t . is_quorum(S) & forall N:id_t . member(N,S) -> accepted_nominate(N, ballot_value)
+        # `self` may receive messages that allow itself to:
+        # 1. accept to nominate x, and
+        # 2. confirm to nominate x, and
+        # 3. vote to prepare x
+        # at the same time.
+        #
+        # When that happens, the node needs to emit two envelopes:
+        # 1. nomination envelope containing { vote(nominate(x)), accept(nominate(x)) }
+        # 2. ballot envelope containing { vote(prepare(x)) }
+        #
+        # It turns out that the current SCP implementation emits 2 before 1.
+        # Therefore, `emit_prepare` will be called before `accepted_nominate` gets updated.
+        # Thus we will let a node emit a prepare statement as long as a quorum
+        # accepts it possibly except for itself.
+        require exists S:nodeset_t . is_quorum(S) & forall N:id_t . member(N,S) -> (N = self | accepted_nominate(N, ballot_value))
     }
 
     after emit_prepare {
