@@ -52,6 +52,8 @@ object network = {
     struct %`node.emit_externalize`;
     struct %`node.emit_logical_vote_nominate`;
     struct %`node.emit_logical_accept_nominate`;
+    struct %`node.nomination_timer_registered`;
+    struct %`node.ballot_timer_registered`;
 
     // This model only runs SCP for a single slot.
     #define SLOT 0
@@ -116,6 +118,8 @@ object network = {
             std::unique_ptr<%`node.emit_externalize`> mEmitExternalizeCb;
             std::unique_ptr<%`node.emit_logical_vote_nominate`> mEmitLogicalVoteNominateCb;
             std::unique_ptr<%`node.emit_logical_accept_nominate`> mEmitLogicalAcceptNominateCb;
+            std::unique_ptr<%`node.nomination_timer_registered`> mNominationTimerRegisteredCb;
+            std::unique_ptr<%`node.ballot_timer_registered`> mBallotTimerRegisteredCb;
 
             public:
 
@@ -131,7 +135,9 @@ object network = {
             std::unique_ptr<%`node.emit_confirm`>,
             std::unique_ptr<%`node.emit_externalize`>,
             std::unique_ptr<%`node.emit_logical_vote_nominate`>,
-            std::unique_ptr<%`node.emit_logical_accept_nominate`>
+            std::unique_ptr<%`node.emit_logical_accept_nominate`>,
+            std::unique_ptr<%`node.nomination_timer_registered`>,
+            std::unique_ptr<%`node.ballot_timer_registered`>
             );
 
             SCP &getSCP() { return mSCP; }
@@ -147,6 +153,7 @@ object network = {
                 setLocalLogPrefix();
                 return mapping(mSCP.getSlot(0, true)->getBallotProtocol().getJsonInfo()["phase"].asString());
             }
+            void fireTimer(int timerID);
         };
 
         // Free functions for working with Stellar XDR and Ivy types.
@@ -155,6 +162,10 @@ object network = {
 
         NodeID fromIvyIdT(`id_t`);
         `id_t` toIvyIdT(NodeID const&);
+
+        // Both the nomination and ballot protocol may set a timer with a callback.
+        std::function<void()> mPendingNominationTimerCb;
+        std::function<void()> mPendingBallotTimerCb;
     }
 
     extern std::unique_ptr<stellar::Network> gNetwork;
@@ -328,7 +339,38 @@ object network = {
         void
         TestSCP::setupTimer(uint64 slotIndex, int timerID, std::chrono::milliseconds timeout, std::function<void()> cb)
         {
-            // We do not use timers in this model.
+            if (cb)
+            {
+                if (timerID == stellar::Slot::BALLOT_PROTOCOL_TIMER)
+                {
+                    CLOG_INFO(SCP, "Registering the ballot protocol timer and callback");
+                    mPendingBallotTimerCb = cb;
+                    (*mBallotTimerRegisteredCb)();
+                }
+                else
+                {
+                    CLOG_INFO(SCP, "Registering the nomination protocol timer and callback");
+                    mPendingNominationTimerCb = cb;
+                    (*mNominationTimerRegisteredCb)();
+                }
+            }
+            else
+            {
+                CLOG_INFO(SCP, "TestSCP::setupTimer ignores an empty cb");
+            }
+        }
+
+        void
+        TestSCP::fireTimer(int timerID)
+        {
+            if (timerID == stellar::Slot::BALLOT_PROTOCOL_TIMER)
+            {
+                mPendingBallotTimerCb();
+            }
+            else
+            {
+                mPendingNominationTimerCb();
+            }
         }
 
         SCPDriver::ValidationLevel
@@ -405,6 +447,8 @@ object network = {
             (*mAcceptedCommitCb)(ballot.counter, ivyVal);
         }
 
+
+
         TestSCP::TestSCP(NodeID const& nodeID, SCPQuorumSet const& qSetLocal,
             std::unique_ptr<%`node.value_externalized`> valueExternalizedCb,
             std::unique_ptr<%`node.nominating_value`> nominatingValueCb,
@@ -417,7 +461,9 @@ object network = {
             std::unique_ptr<%`node.emit_confirm`> emitConfirmCb,
             std::unique_ptr<%`node.emit_externalize`> emitExternalizeCb,
             std::unique_ptr<%`node.emit_logical_vote_nominate`> emitLogicalVoteNominateCb,
-            std::unique_ptr<%`node.emit_logical_accept_nominate`> emitLogicalAcceptNominateCb
+            std::unique_ptr<%`node.emit_logical_accept_nominate`> emitLogicalAcceptNominateCb,
+            std::unique_ptr<%`node.nomination_timer_registered`> nominationTimerRegisteredCb,
+            std::unique_ptr<%`node.ballot_timer_registered`> ballotTimerRegisteredCb
             )
         : mSCP(*this, nodeID, true, qSetLocal),
         mValueExternalizedCb(std::move(valueExternalizedCb)),
@@ -431,7 +477,9 @@ object network = {
         mEmitConfirmCb(std::move(emitConfirmCb)),
         mEmitExternalizeCb(std::move(emitExternalizeCb)),
         mEmitLogicalVoteNominateCb(std::move(emitLogicalVoteNominateCb)),
-        mEmitLogicalAcceptNominateCb(std::move(emitLogicalAcceptNominateCb))
+        mEmitLogicalAcceptNominateCb(std::move(emitLogicalAcceptNominateCb)),
+        mNominationTimerRegisteredCb(std::move(nominationTimerRegisteredCb)),
+        mBallotTimerRegisteredCb(std::move(ballotTimerRegisteredCb))
         {}
 
         void
@@ -544,6 +592,9 @@ object node(self:id_t) = {
     relation prepare_aborts(PC:counter_t, PV:val_t, BC:counter_t, BV:val_t)
     definition prepare_aborts(pc:counter_t, pv:val_t, bc:counter_t, bv:val_t) = ballot_lt(bc,bv,pc,pv) & ~(pv = bv)
 
+    var nomination_timer_is_registered : bool
+    var ballot_timer_is_registered : bool
+
     # These actions are _called back_ from SCPTest in response to changes in the
     # C++ SCP state machine. They exist (without bodies) so that we can specify
     # their preconditions and trap violations. Ivy does not spontaneously call
@@ -558,6 +609,16 @@ object node(self:id_t) = {
     import action accepted_ballot_prepared(n:counter_t, x:val_t)
     import action confirmed_ballot_prepared(n:counter_t, x:val_t)
     import action accepted_commit(n:counter_t, x:val_t)
+    import action nomination_timer_registered
+    import action ballot_timer_registered
+
+    after nomination_timer_registered {
+        nomination_timer_is_registered := true;
+    }
+
+    after ballot_timer_registered {
+        ballot_timer_is_registered := true;
+    }
 
     # We have one generic "emit-an-envelope" action that conveys the
     # fact that there's a new envelope to consume in the history.
@@ -670,7 +731,9 @@ object node(self:id_t) = {
                                                    std::make_unique<%`emit_confirm`>(`emit_confirm`),
                                                    std::make_unique<%`emit_externalize`>(`emit_externalize`),
                                                    std::make_unique<%`emit_logical_vote_nominate`>(`emit_logical_vote_nominate`),
-                                                   std::make_unique<%`emit_logical_accept_nominate`>(`emit_logical_accept_nominate`));
+                                                   std::make_unique<%`emit_logical_accept_nominate`>(`emit_logical_accept_nominate`),
+                                                   std::make_unique<%`nomination_timer_registered`>(`nomination_timer_registered`),
+                                                   std::make_unique<%`ballot_timer_registered`>(`ballot_timer_registered`));
     >>>
 
     # Ghost variables tracking the history of which nodes _self_ has heard from --
@@ -720,6 +783,30 @@ object node(self:id_t) = {
         >>>
     }
 
+    export action fire_nomination_timer = {
+        <<< impure
+        `testSCP`->fireTimer(stellar::Slot::NOMINATION_TIMER);
+        >>>
+    }
+    before fire_nomination_timer {
+        require nomination_timer_is_registered;
+    }
+    after fire_nomination_timer {
+        nomination_timer_is_registered := false;
+    }
+
+    export action fire_ballot_timer = {
+        <<< impure
+        `testSCP`->fireTimer(stellar::Slot::BALLOT_PROTOCOL_TIMER);
+        >>>
+    }
+    before fire_ballot_timer {
+        require ballot_timer_is_registered;
+    }
+    after fire_ballot_timer {
+        ballot_timer_is_registered := false;
+    }
+
     # These have to be vars + actions instead of functions with native definitions;
     # for some reason Ivy is willing to recognize the anti-quote of `self` in a
     # function definition here but not anti-quotes of `testSCP`. It only likes
@@ -746,7 +833,9 @@ object node(self:id_t) = {
         voted_nominate(X, V) := false;
         accepted_nominate(X, V) := false;
         heard_vote_nominate(X, V) := false;
-        heard_accept_nominate(X, V) := false
+        heard_accept_nominate(X, V) := false;
+        ballot_timer_is_registered := false;
+        nomination_timer_is_registered := false;
     }
 
     before nominate {
