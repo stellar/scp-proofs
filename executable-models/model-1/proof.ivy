@@ -19,26 +19,8 @@ private {
     invariant [accept_means_at_least_one_vote]
         forall SELF, VAL. node.accepted(SELF, VAL) -> (exists NODE. node.voted(NODE, VAL))
 
-    invariant [if_node_is_ready_to_accept_it_must_accept]
-        forall N, V . ~node.ready_to_accept_but_have_not_accepted(N, V)
-
-    invariant [if_node_is_ready_to_confirm_it_must_confirm]
-        forall N, V . ~node.ready_to_confirm_but_have_not_confirmed(N, V)
-
-    invariant [accepted_implies_node_heard_itself_accept]
-        forall N, V. node.accepted(N, V) -> node.heard_accept(N, N, V)
-
-    invariant [voted_implies_node_heard_itself_vote]
-        forall N, V. node.voted(N, V) -> node.heard_vote(N, N, V)
-
-    invariant [confirmed_implies_it_heard_at_least_one_node_accept]
-        forall N, V. node.confirmed(N,V) -> exists N2. N ~= N2 & node.heard_accept(N,N2,V)
-
     invariant [accepted_implies_at_least_one_node_voted]
         forall V. (exists N1. node.accepted(N1, V)) -> (exists N2. node.voted(N2, V))
-
-    invariant [confirmed_implies_accepted]
-        forall N, V . node.confirmed(N, V) -> node.accepted(N, V)
 
     invariant [confirmed_implies_there_exists_quorum_accepting_value]
         forall N, V . node.confirmed(N, V) ->
