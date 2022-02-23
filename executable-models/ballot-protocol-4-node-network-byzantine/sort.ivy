@@ -1,0 +1,29 @@
+#lang ivy1.7
+
+include order
+
+type id_t
+type set_t
+type ballot_t
+type statement_t = {prepare, commit}
+
+# bv[2] => bit vector of length 2 => 2^2 = 4 nodes.
+interpret id_t -> bv[2]
+# bv[4] => bit vector of length 4 => 2^4 = 16 subsets of nodes.
+interpret set_t -> bv[4]
+
+# `compatible(BAL1, BAL2) ⟺   BAL1.x = BAL2.x`
+# Note that `b1 ⋦ b2 ⟺   b1 < b2 & ~compatible(b1, b2)`.
+relation compatible(BAL1:ballot_t, BAL2:ballot_t)
+
+trusted isolate ballot_properties = {
+    # > Ballots are totally ordered, with b.n more significant than b.x.
+    # P.22 of the white paper.
+    instantiate totally_ordered(ballot_t)
+
+    # As `compatible(BAL1, BAL2) ⟺   BAL1.x = BAL2.x`,
+    # it is necessary that `compatible` is an equivalence relation.
+    axiom compatible(BAL, BAL)
+    axiom compatible(BAL1, BAL2) -> compatible(BAL2, BAL1)
+    axiom (compatible(BAL1, BAL2) & compatible(BAL2, BAL3)) -> compatible(BAL1, BAL3)
+}

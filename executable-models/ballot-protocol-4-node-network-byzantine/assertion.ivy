@@ -1,0 +1,28 @@
+#lang ivy1.7
+
+object assertion =
+{
+    relation heard_accept_implies_accepted(TYPE:statement_t, SELF:id_t, OTHER:id_t, BAL:ballot_t)
+    definition heard_accept_implies_accepted(TYPE, SELF, OTHER, BAL) =
+        (node.well_behaved(SELF) & node.well_behaved(OTHER) & node.heard_accept(TYPE, SELF, OTHER, BAL)) -> node.accepted(TYPE, OTHER, BAL)
+
+    relation confirmed_implies_there_exists_quorum_accepting_ballot(TYPE:statement_t, NODE:id_t, BAL:ballot_t)
+    definition confirmed_implies_there_exists_quorum_accepting_ballot(TYPE, NODE, BAL) =
+        (node.well_behaved(NODE) & node.confirmed(TYPE, NODE, BAL)) ->
+            (exists Q. node.is_quorum(Q) & node.member(NODE, Q) & node.heard_set_accept(TYPE, NODE, Q, BAL))
+
+    relation accepted_commit_implies_confirmed_prepare(NODE:id_t, BAL:ballot_t)
+    definition accepted_commit_implies_confirmed_prepare(NODE, BAL) = (node.well_behaved(NODE) & node.accepted(commit, NODE, BAL)) -> node.confirmed(prepare, NODE, BAL)
+
+    relation confirmed_commit_implies_confirmed_prepare(NODE:id_t, BAL:ballot_t)
+    definition confirmed_commit_implies_confirmed_prepare(NODE, BAL) = (node.well_behaved(NODE) & node.confirmed(commit, NODE, BAL)) -> node.confirmed(prepare, NODE, BAL)
+
+    relation never_accepted_to_prepare_greater_incompatible_ballots_after_accepting_to_commit(NODE:id_t, BAL:ballot_t)
+    definition never_accepted_to_prepare_greater_incompatible_ballots_after_accepting_to_commit(NODE, BAL) =
+        (node.well_behaved(NODE) & node.accepted(commit, NODE, BAL)) ->
+            (forall OTHERBAL. node.accepted(prepare, NODE, OTHERBAL) -> (OTHERBAL < BAL | compatible(BAL, OTHERBAL)))
+
+    relation confirm_commit_only_same_values(NODE1:id_t, NODE2:id_t, BAL1:ballot_t, BAL2:ballot_t)
+    definition confirm_commit_only_same_values(NODE1, NODE2, BAL1, BAL2) =
+        (node.well_behaved(NODE1) & node.well_behaved(NODE2) & node.confirmed(commit, NODE1, BAL1) & node.confirmed(commit, NODE2, BAL2)) -> compatible(BAL1, BAL2)
+}
