@@ -1,0 +1,751 @@
+#lang ivy1.7
+
+type id_t
+type val_t
+type counter_t
+type ballotstate = {prepare, confirm, externalize}
+type nodeset_t
+type qset_t
+
+# NB: nodeset_t has to be the powerset of id_t
+interpret id_t -> bv[2]
+interpret nodeset_t -> bv[4]
+
+# val_t is the type of values, counter_t we use for
+# anything nontrivially-number-y like ballot counters,
+# envelope numbers, nomination rounds, etc.
+interpret val_t -> bv[4]
+interpret counter_t -> bv[8]
+
+object network = {
+
+    # This part is emitted into the generated .h file.
+    <<< header
+    #include <memory>
+    #include <vector>
+    #include <exception>
+    #include <mutex>
+    #include <cstdint>
+
+    #define USE_SPDLOG
+    #include <crypto/Hex.h>
+    #include <crypto/SecretKey.h>
+    #include <crypto/SHA.h>
+    #include <scp/SCP.h>
+    #include <scp/Slot.h>
+    #include <scp/QuorumSetUtils.h>
+    #include <util/Logging.h>
+    #include <util/XDROperators.h>
+    #include <lib/json/json.h>
+
+    // Forward-declare all the callback types so we can use them
+    // in incomplete-typed unique_ptr<T> members and arguments.
+    struct %`node.value_externalized`;
+    struct %`node.nominating_value`;
+    struct %`node.started_ballot_protocol`;
+    struct %`node.accepted_ballot_prepared`;
+    struct %`node.confirmed_ballot_prepared`;
+    struct %`node.accepted_commit`;
+    struct %`node.emit_envelope`;
+    struct %`node.emit_prepare`;
+    struct %`node.emit_confirm`;
+    struct %`node.emit_externalize`;
+    struct %`node.emit_logical_vote_nominate`;
+    struct %`node.emit_logical_accept_nominate`;
+
+    // This model only runs SCP for a single slot.
+    #define SLOT 0
+
+    namespace stellar {
+
+        // There will be 1 instance of this Network object representing the network
+        // as a whole. We have to initialize this all in one (global) place so we can
+        // build a single QSet that contains all the NodeIDs. It's constant once
+        // initialized.
+        struct Network {
+            // The network has a fixed set of nodes.
+            const xdr::xvector<NodeID> mNodeIDs;
+
+            // The network has a single quorum set built on those nodes.
+            const SCPQuorumSetPtr mQSet;
+            const Hash mQSetHash;
+
+            // Envelopes are broadcast into a globally visible history which
+            // individual nodes advance their consumption of.
+            std::vector<SCPEnvelopeWrapperPtr> mBroadcastEnvelopes;
+
+            Network(unsigned n);
+        };
+
+        // Each node will have an instance of this class which contains the SCP state machine
+        // and also is an SCPDriver which mediates communication between Ivy and that SCP.
+        //
+        // NB: this class has to be called `stellar::TestSCP` exactly, to match a `friend`
+        // declaration in SCP that allows us to access private members of SCP.
+        class TestSCP : public SCPDriver {
+
+            SCP mSCP;
+
+            void signEnvelope(SCPEnvelope& envelope) override;
+            SCPQuorumSetPtr getQSet(Hash const& qSetHash) override;
+            void emitEnvelope(SCPEnvelope const& envelope) override;
+            Hash getHashOf(std::vector<xdr::opaque_vec<>> const& vals) const override;
+            ValueWrapperPtr combineCandidates(uint64 slotIndex, ValueWrapperPtrSet const& candidates) override;
+            void setupTimer(uint64 slotIndex, int timerID, std::chrono::milliseconds timeout, std::function<void()> cb) override;
+            ValidationLevel validateValue(uint64 slotIndex, Value const& value, bool nomination) override;
+
+            // Hooks that are fired when various SCP state-transitions occur. These are routed
+            // into the callbacks that follow.
+            void valueExternalized(uint64 slotIndex, Value const& value) override;
+            void nominatingValue(uint64 slotIndex, Value const& value) override;
+            void startedBallotProtocol(uint64 slotIndex, SCPBallot const& ballot) override;
+            void acceptedBallotPrepared(uint64 slotIndex, SCPBallot const& ballot) override;
+            void confirmedBallotPrepared(uint64 slotIndex, SCPBallot const& ballot) override;
+            void acceptedCommit(uint64 slotIndex, SCPBallot const& ballot) override;
+
+            // Thunks that can be set for callbacks from the SCP driver to Ivy.
+            std::unique_ptr<%`node.value_externalized`> mValueExternalizedCb;
+            std::unique_ptr<%`node.nominating_value`> mNominatingValueCb;
+            std::unique_ptr<%`node.started_ballot_protocol`> mStartedBallotProtocolCb;
+            std::unique_ptr<%`node.accepted_ballot_prepared`> mAcceptedBallotPreparedCb;
+            std::unique_ptr<%`node.confirmed_ballot_prepared`> mConfirmedBallotPreparedCb;
+            std::unique_ptr<%`node.accepted_commit`> mAcceptedCommitCb;
+            std::unique_ptr<%`node.emit_envelope`> mEmitEnvelopeCb;
+            std::unique_ptr<%`node.emit_prepare`> mEmitPrepareCb;
+            std::unique_ptr<%`node.emit_confirm`> mEmitConfirmCb;
+            std::unique_ptr<%`node.emit_externalize`> mEmitExternalizeCb;
+            std::unique_ptr<%`node.emit_logical_vote_nominate`> mEmitLogicalVoteNominateCb;
+            std::unique_ptr<%`node.emit_logical_accept_nominate`> mEmitLogicalAcceptNominateCb;
+
+            public:
+
+            TestSCP(NodeID const& nodeID, SCPQuorumSet const& qSetLocal,
+            std::unique_ptr<%`node.value_externalized`>,
+            std::unique_ptr<%`node.nominating_value`>,
+            std::unique_ptr<%`node.started_ballot_protocol`>,
+            std::unique_ptr<%`node.accepted_ballot_prepared`>,
+            std::unique_ptr<%`node.confirmed_ballot_prepared`>,
+            std::unique_ptr<%`node.accepted_commit`>,
+            std::unique_ptr<%`node.emit_envelope`>,
+            std::unique_ptr<%`node.emit_prepare`>,
+            std::unique_ptr<%`node.emit_confirm`>,
+            std::unique_ptr<%`node.emit_externalize`>,
+            std::unique_ptr<%`node.emit_logical_vote_nominate`>,
+            std::unique_ptr<%`node.emit_logical_accept_nominate`>
+            );
+
+            SCP &getSCP() { return mSCP; }
+
+            // Miscellaneous helper functions used in the implementation, that happen to need
+            // to be members of TestSCP in order to access (possibly private) state in SCP.
+            void setLocalLogPrefix();
+            bool isLeader();
+            unsigned getSCPStatementCount();
+            unsigned getNomRound();
+            template <typename T>
+            T getSCPBallotState(std::function<T(std::string const&)> mapping) {
+                setLocalLogPrefix();
+                return mapping(mSCP.getSlot(0, true)->getBallotProtocol().getJsonInfo()["phase"].asString());
+            }
+        };
+
+        // Free functions for working with Stellar XDR and Ivy types.
+        Value fromIvyValT(`val_t`);
+        `val_t` toIvyValT(Value const&);
+
+        NodeID fromIvyIdT(`id_t`);
+        `id_t` toIvyIdT(NodeID const&);
+    }
+
+    extern std::unique_ptr<stellar::Network> gNetwork;
+    >>>
+
+    # This part is emitted into the generated .cpp file and can thus see everything in the .h file
+    <<< impl
+    namespace stellar
+    {
+        Value fromIvyValT(`val_t` v)
+        {
+            Value val;
+            assert(v <= 0xff);
+            val.emplace_back((uint8_t)v);
+            return val;
+        }
+
+        `val_t` toIvyValT(Value const& val)
+        {
+            return (`val_t`)val.at(0);
+        }
+
+        NodeID fromIvyIdT(`id_t` id)
+        {
+            if ((size_t)id > gNetwork->mNodeIDs.size())
+            {
+                CLOG_ERROR(SCP, "unknown node id {}", id);
+                throw std::runtime_error("unknown node id");
+            }
+            return gNetwork->mNodeIDs.at(id);
+        }
+
+        `id_t` toIvyIdT(NodeID const& id)
+        {
+            `id_t` n = 0;
+            for (auto const& nid : gNetwork->mNodeIDs)
+            {
+                if (nid == id)
+                {
+                    return n;
+                }
+                ++n;
+            }
+            CLOG_ERROR(SCP, "unknown node id {}", KeyUtils::toShortString(id));
+            throw std::runtime_error("unknown node id");
+        }
+
+        void
+        TestSCP::signEnvelope(SCPEnvelope& envelope)
+        {
+            // Do nothing -- we don't bother with signatures in this model.
+        }
+
+        SCPQuorumSetPtr
+        TestSCP::getQSet(Hash const& qSetHash)
+        {
+            // We support exactly 1 qset in this model.
+            if (qSetHash != gNetwork->mQSetHash)
+            {
+                using namespace stellar;
+                setLocalLogPrefix();
+                CLOG_ERROR(SCP, "can't find qset hash {}", hexAbbrev(qSetHash));
+                throw std::runtime_error("can't find qset hash");
+            }
+            return gNetwork->mQSet;
+        }
+
+        void
+        TestSCP::emitEnvelope(SCPEnvelope const& envelope)
+        {
+            using namespace stellar;
+            setLocalLogPrefix();
+            auto const& stmt = envelope.statement;
+            assert(getSCP().getLocalNodeID() == envelope.statement.nodeID);
+            auto nodeNum = toIvyIdT(envelope.statement.nodeID);
+            switch (stmt.pledges.type())
+            {
+                case SCP_ST_PREPARE:
+                {
+                    CLOG_INFO(SCP, "TestSCP::emitEnvelope(SCP_ST_PREPARE, ...)");
+                    assert(mEmitPrepareCb);
+                    auto const &prep = stmt.pledges.prepare();
+                    `val_t` p_val{0}, pp_val{0};
+                    `counter_t` p_ctr{0}, pp_ctr{0};
+                    bool p{false}, pp{false};
+                    if (prep.prepared)
+                    {
+                        p_val = toIvyValT((*prep.prepared).value);
+                        p_ctr = (*prep.prepared).counter;
+                    }
+                    if (prep.preparedPrime)
+                    {
+                        pp_val = toIvyValT((*prep.preparedPrime).value);
+                        pp_ctr = (*prep.preparedPrime).counter;
+                    }
+                    CLOG_INFO(SCP, "    => node.emit_prepare(node:{}, b.ctr:{}, b.val:{}, p:{}, p.ctr:{}, p.val:{}, pp:{}, pp.ctr:{}, pp.val:{}, c.ctr:{}, h.ctr:{})",
+                                                            nodeNum, prep.ballot.counter, toIvyValT(prep.ballot.value), p, p_val, p_ctr, pp, pp_val, pp_ctr, prep.nC, prep.nH);
+                    (*mEmitPrepareCb)(prep.ballot.counter, toIvyValT(prep.ballot.value), p, p_val, p_ctr, pp, pp_val, pp_ctr, prep.nC, prep.nH);
+                }
+                break;
+
+                case SCP_ST_CONFIRM:
+                {
+                    CLOG_INFO(SCP, "TestSCP::emitEnvelope(SCP_ST_CONFIRM, ...)");
+                    assert(mEmitConfirmCb);
+                    auto const &confirm = stmt.pledges.confirm();
+                    CLOG_INFO(SCP, "    => node.emit_confirm(node:{}, ballot.ctr:{}, ballot.val:{}, prepared.ctr:{}, commit.ctr:{}, h.ctr:{})",
+                                                             nodeNum, confirm.ballot.counter, toIvyValT(confirm.ballot.value), confirm.nPrepared, confirm.nCommit, confirm.nH);
+                    (*mEmitConfirmCb)(confirm.ballot.counter, toIvyValT(confirm.ballot.value), confirm.nPrepared, confirm.nCommit, confirm.nH);
+                }
+                break;
+
+                case SCP_ST_EXTERNALIZE:
+                {
+                    CLOG_INFO(SCP, "TestSCP::emitEnvelope(SCP_ST_EXTERNALIZE, ...)");
+                    assert(mEmitExternalizeCb);
+                    auto const &ext = stmt.pledges.externalize();
+                    CLOG_INFO(SCP, "    => node.emit_externalize(node:{}, commit.ctr:{}, commit.val:{}, h.ctr:{})",
+                    nodeNum, ext.commit.counter, toIvyValT(ext.commit.value), ext.nH);
+                    (*mEmitExternalizeCb)(ext.commit.counter, toIvyValT(ext.commit.value), ext.nH);
+                }
+                break;
+
+                case SCP_ST_NOMINATE:
+                {
+                    CLOG_INFO(SCP, "TestSCP::emitEnvelope(SCP_ST_NOMINATE, ...)");
+                    assert(mEmitLogicalVoteNominateCb);
+                    assert(mEmitLogicalAcceptNominateCb);
+                    auto const &nom = stmt.pledges.nominate();
+                    for (auto const& v : nom.votes)
+                    {
+                        CLOG_INFO(SCP, "    => node.emit_logical_vote_nominate(node:{}, val:{})", nodeNum, toIvyValT(v));
+                        (*mEmitLogicalVoteNominateCb)(toIvyValT(v));
+                    }
+                    for (auto const& a : nom.accepted)
+                    {
+                        CLOG_INFO(SCP, "    => node.emit_logical_accept_nominate(node:{}, val:{})", nodeNum, toIvyValT(a));
+                        (*mEmitLogicalAcceptNominateCb)(toIvyValT(a));
+                    }
+                }
+                break;
+            }
+            auto envNum = gNetwork->mBroadcastEnvelopes.size();
+            CLOG_INFO(SCP, "    => node.emit_envelope(node:{}, env:{})", nodeNum, envNum);
+            gNetwork->mBroadcastEnvelopes.emplace_back(std::make_shared<SCPEnvelopeWrapper>(envelope));
+            (*mEmitEnvelopeCb)(envNum);
+        }
+
+        Hash
+        TestSCP::getHashOf(std::vector<xdr::opaque_vec<>> const& vals) const
+        {
+            SHA256 hasher;
+            for (auto const& v : vals)
+            {
+                hasher.add(v);
+            }
+            return hasher.finish();
+        }
+
+        ValueWrapperPtr
+        TestSCP::combineCandidates(uint64 slotIndex, ValueWrapperPtrSet const& candidates)
+        {
+            // combineCandidates just takes the first candidate. Simple, but sufficient.
+            {
+                using namespace stellar;
+                CLOG_INFO(SCP, "Combining candidates!");
+            }
+            return *candidates.begin();
+        }
+
+        void
+        TestSCP::setupTimer(uint64 slotIndex, int timerID, std::chrono::milliseconds timeout, std::function<void()> cb)
+        {
+            // We do not use timers in this model.
+        }
+
+        SCPDriver::ValidationLevel
+        TestSCP::validateValue(uint64 slotIndex, Value const& value, bool nomination)
+        {
+            // We consider all messages fully validated.
+            return kFullyValidatedValue;
+        }
+
+        void
+        TestSCP::valueExternalized(uint64 slotIndex, Value const& value)
+        {
+            using namespace stellar;
+            `val_t` ivyVal = toIvyValT(value);
+            setLocalLogPrefix();
+            CLOG_TRACE(SCP, "TestSCP::valueExternalized(value={})", ivyVal);
+            assert(slotIndex == SLOT);
+            assert(mValueExternalizedCb);
+            (*mValueExternalizedCb)(ivyVal);
+        }
+
+        void TestSCP::nominatingValue(uint64 slotIndex, Value const& value)
+        {
+            using namespace stellar;
+            `val_t` ivyVal = toIvyValT(value);
+            setLocalLogPrefix();
+            CLOG_TRACE(SCP, "TestSCP::nominatingValue(value={})", ivyVal);
+            assert(slotIndex == SLOT);
+            assert(mNominatingValueCb);
+            (*mNominatingValueCb)(ivyVal);
+        }
+
+        void TestSCP::startedBallotProtocol(uint64 slotIndex, SCPBallot const& ballot)
+        {
+            using namespace stellar;
+            `val_t` ivyVal = toIvyValT(ballot.value);
+            setLocalLogPrefix();
+            CLOG_TRACE(SCP, "TestSCP::startedBallotProtocol(counter={}, value={})", ballot.counter, ivyVal);
+            assert(slotIndex == SLOT);
+            assert(mStartedBallotProtocolCb);
+            (*mStartedBallotProtocolCb)(ballot.counter, ivyVal);
+        }
+
+        void TestSCP::acceptedBallotPrepared(uint64 slotIndex, SCPBallot const& ballot)
+        {
+            using namespace stellar;
+            `val_t` ivyVal = toIvyValT(ballot.value);
+            setLocalLogPrefix();
+            CLOG_TRACE(SCP, "TestSCP::acceptedBallotPrepared(counter={}, value={})", ballot.counter, ivyVal);
+            assert(slotIndex == SLOT);
+            assert(mAcceptedBallotPreparedCb);
+            (*mAcceptedBallotPreparedCb)(ballot.counter, ivyVal);
+        }
+
+        void TestSCP::confirmedBallotPrepared(uint64 slotIndex, SCPBallot const& ballot)
+        {
+            using namespace stellar;
+            `val_t` ivyVal = toIvyValT(ballot.value);
+            setLocalLogPrefix();
+            CLOG_TRACE(SCP, "TestSCP::confirmedBallotPrepared(counter={}, value={})", ballot.counter, ivyVal);
+            assert(slotIndex == SLOT);
+            assert(mConfirmedBallotPreparedCb);
+            (*mConfirmedBallotPreparedCb)(ballot.counter, ivyVal);
+        }
+
+        void TestSCP::acceptedCommit(uint64 slotIndex, SCPBallot const& ballot)
+        {
+            using namespace stellar;
+            `val_t` ivyVal = toIvyValT(ballot.value);
+            setLocalLogPrefix();
+            CLOG_TRACE(SCP, "TestSCP::acceptedCommit(counter={}, value={})", ballot.counter, ivyVal);
+            assert(slotIndex == SLOT);
+            assert(mAcceptedCommitCb);
+            (*mAcceptedCommitCb)(ballot.counter, ivyVal);
+        }
+
+        TestSCP::TestSCP(NodeID const& nodeID, SCPQuorumSet const& qSetLocal,
+            std::unique_ptr<%`node.value_externalized`> valueExternalizedCb,
+            std::unique_ptr<%`node.nominating_value`> nominatingValueCb,
+            std::unique_ptr<%`node.started_ballot_protocol`> startedBallotProtocolCb,
+            std::unique_ptr<%`node.accepted_ballot_prepared`> acceptedBallotPreparedCb,
+            std::unique_ptr<%`node.confirmed_ballot_prepared`> confirmedBallotPreparedCb,
+            std::unique_ptr<%`node.accepted_commit`> acceptedCommitCb,
+            std::unique_ptr<%`node.emit_envelope`> emitEnvelopeCb,
+            std::unique_ptr<%`node.emit_prepare`> emitPrepareCb,
+            std::unique_ptr<%`node.emit_confirm`> emitConfirmCb,
+            std::unique_ptr<%`node.emit_externalize`> emitExternalizeCb,
+            std::unique_ptr<%`node.emit_logical_vote_nominate`> emitLogicalVoteNominateCb,
+            std::unique_ptr<%`node.emit_logical_accept_nominate`> emitLogicalAcceptNominateCb
+            )
+        : mSCP(*this, nodeID, true, qSetLocal),
+        mValueExternalizedCb(std::move(valueExternalizedCb)),
+        mNominatingValueCb(std::move(nominatingValueCb)),
+        mStartedBallotProtocolCb(std::move(startedBallotProtocolCb)),
+        mAcceptedBallotPreparedCb(std::move(acceptedBallotPreparedCb)),
+        mConfirmedBallotPreparedCb(std::move(confirmedBallotPreparedCb)),
+        mAcceptedCommitCb(std::move(acceptedCommitCb)),
+        mEmitEnvelopeCb(std::move(emitEnvelopeCb)),
+        mEmitPrepareCb(std::move(emitPrepareCb)),
+        mEmitConfirmCb(std::move(emitConfirmCb)),
+        mEmitExternalizeCb(std::move(emitExternalizeCb)),
+        mEmitLogicalVoteNominateCb(std::move(emitLogicalVoteNominateCb)),
+        mEmitLogicalAcceptNominateCb(std::move(emitLogicalAcceptNominateCb))
+        {}
+
+        void
+        TestSCP::setLocalLogPrefix() {
+            Logging::setFmt(KeyUtils::toShortString(mSCP.getLocalNodeID()));
+        }
+
+        bool
+        TestSCP::isLeader() {
+            auto noms = mSCP.getSlot(0, true)->getNominationLeaders();
+            return noms.find(mSCP.getLocalNodeID()) != noms.end();
+        }
+
+        unsigned
+        TestSCP::getSCPStatementCount() {
+            setLocalLogPrefix();
+            return (unsigned)mSCP.getSlot(0, true)->getStatementCount();
+        }
+
+        unsigned
+        TestSCP::getNomRound() {
+            setLocalLogPrefix();
+            return (unsigned)mSCP.getSlot(0, true)->getJsonInfo()["nomination"]["roundnumber"].asUInt();
+        }
+
+        static xdr::xvector<NodeID>
+        initNodeIDs(unsigned n)
+        {
+            xdr::xvector<NodeID> nodes;
+            while (nodes.size() < n)
+            {
+                nodes.emplace_back(PubKeyUtils::random());
+            }
+            return nodes;
+        }
+
+        static SCPQuorumSetPtr
+        initQSet(xdr::xvector<NodeID> const& nodes)
+        {
+            xdr::xvector<SCPQuorumSet> innerSets;
+            auto qset = std::make_shared<SCPQuorumSet>((nodes.size())/2 + 1, nodes, innerSets);
+            normalizeQSet(*qset);
+            return qset;
+        }
+
+        Network::Network(unsigned n)
+        : mNodeIDs(initNodeIDs(n))
+        , mQSet(initQSet(mNodeIDs))
+        , mQSetHash(xdrSha256(*mQSet))
+        {}
+    }
+
+    std::unique_ptr<stellar::Network> gNetwork;
+    >>>
+
+    # This part is called in the executable::executable (world) constructor
+    # to initialize the `network` object.
+    <<< init
+
+    // `network` is the first Ivy object initialized, so its `init` block
+    // is responsible for setting up logging.
+    stellar::Logging::init();
+    stellar::Logging::setLoggingColor(true);
+    stellar::Logging::setLogLevel(stellar::LogLevel::LVL_TRACE, "SCP");
+
+    // We then build a single global instance of the Network object, passing
+    // the cardinality of the `id_t` type for the node count.
+    gNetwork = std::make_unique<stellar::Network>(__CARD__id_t);
+    >>>
+
+    after init {
+        broadcastEnvelopes := 0
+    }
+}
+
+# Ghost variables tracking the history of which nodes did what in the network. NB: these have to be
+# _outside_ the node module, otherwise N-ary relations implicitly get upgraded into N+1-ary, often
+# mean something very different!
+relation voted_nominate(NODE:id_t, VAL:val_t)
+relation accepted_nominate(NODE:id_t, VAL:val_t)
+relation confirmed_nominate(NODE:id_t, VAL:val_t)
+
+relation voted_abort(NODE:id_t, CTR:counter_t, VAL:val_t)
+relation accepted_abort(NODE:id_t, CTR:counter_t, VAL:val_t)
+relation confirmed_abort(NODE:id_t, CTR:counter_t, VAL:val_t)
+
+relation voted_commit(NODE:id_t, CTR:counter_t, VAL:val_t)
+relation accepted_commit(NODE:id_t, CTR:counter_t, VAL:val_t)
+relation confirmed_commit(NODE:id_t, CTR:counter_t, VAL:val_t)
+
+
+# We track the received-status of every envelope that was emitted as well as the
+# count of envelopes that have been generated. Receipt is gated on having not yet
+# received a message, though sending and receiving can happen in different orders.
+relation received(NODE:id_t, ENVELOPE:counter_t)
+var broadcastEnvelopes:counter_t
+
+object node(self:id_t) = {
+
+    function member(N:id_t, S:nodeset_t):bool
+    definition member(n:id_t, s:nodeset_t) = <<< ((bool)(`s` & (1 << `n`))) >>>
+
+    function is_quorum(S:nodeset_t):bool
+    definition is_quorum(s:nodeset_t) = <<< (__builtin_popcount(`s`) >= ((__CARD__id_t / 2) + 1)) >>>
+
+    relation ballot_lt(AC:counter_t, AV:val_t, BC:counter_t, BV:val_t)
+    definition ballot_lt(ac:counter_t, av:val_t, bc:counter_t, bv:val_t) = (ac < bc | (ac = bc & av < bv))
+
+    # prepare(p) = { abort(b) | b < p AND b.value != p.value }
+    relation prepare_aborts(PC:counter_t, PV:val_t, BC:counter_t, BV:val_t)
+    definition prepare_aborts(pc:counter_t, pv:val_t, bc:counter_t, bv:val_t) = ballot_lt(bc,bv,pc,pv) & ~(pv = bv)
+
+    # These actions are _called back_ from SCPTest in response to changes in the
+    # C++ SCP state machine. They exist (without bodies) so that we can specify
+    # their preconditions and trap violations. Ivy does not spontaneously call
+    # any of these. It's not entirely clear we want to use these rather than
+    # envelope-emit events as our spec, but we trap them for now.
+    #
+    # The word "import" here tells ivy that it needs to _check_ preconditions,
+    # rather than assuming them.
+    import action value_externalized(v:val_t)
+    import action nominating_value(v:val_t)
+    import action started_ballot_protocol(n:counter_t, x:val_t)
+    import action accepted_ballot_prepared(n:counter_t, x:val_t)
+    import action confirmed_ballot_prepared(n:counter_t, x:val_t)
+    import action accepted_commit(n:counter_t, x:val_t)
+
+    # We have one generic "emit-an-envelope" action that conveys the
+    # fact that there's a new envelope to consume in the history.
+    # This is called _after_ all the other emit_foo callbacks conveying
+    # the logical content of the message being emitted.
+    action emit_envelope(envNum:counter_t) = {
+        received(N, broadcastEnvelopes) := false;
+        broadcastEnvelopes := broadcastEnvelopes + 1
+    }
+
+    # nomination protocol messages encode a variable number of vote and accept
+    # concepts, so we split these out into separate logical vote and accept
+    # callbacks.
+    action emit_logical_vote_nominate(val:val_t)
+    action emit_logical_accept_nominate(val:val_t)
+
+    before emit_logical_accept_nominate {
+        require exists S:nodeset_t . is_quorum(S) & forall N:id_t . member(N,S) -> (voted_nominate(N, val) | accepted_nominate(N, val))
+    }
+
+    after emit_logical_vote_nominate {
+        voted_nominate(self, val) := true
+    }
+
+    after emit_logical_accept_nominate {
+        accepted_nominate(self, val) := true
+    }
+
+    # ballot protocol messages encode a number of concepts but they use mostly-fixed
+    # messages to convey them (with the exception of an optional-null field which we
+    # convey using a boolean and 0 values when the boolean is false).
+    action emit_prepare(ballot_counter:counter_t, ballot_value:val_t,
+                        prepared:bool, prepared_counter:counter_t, prepared_value:val_t,
+                        prepared_prime:bool, prepared_prime_counter:counter_t, prepared_prime_value:val_t,
+                        c_counter:counter_t, h_counter:counter_t)
+
+    before emit_prepare {
+        require exists S:nodeset_t . is_quorum(S) & forall N:id_t . member(N,S) -> accepted_nominate(N, ballot_value)
+    }
+
+    after emit_prepare {
+        voted_abort(self,BC,BV) := prepare_aborts(ballot_counter, ballot_value, BC, BV);
+        accepted_abort(self,BC,BV) := prepare_aborts(ballot_counter, ballot_value, BC, BV)
+    }
+
+    action emit_confirm(ballot_counter:counter_t,
+                        ballot_value:val_t,
+                        prepared_counter:counter_t,
+                        c_counter:counter_t,
+                        h_counter:counter_t)
+
+    action emit_externalize(commit_counter:counter_t, commit_value:val_t, h_counter:counter_t)
+
+    before value_externalized {
+        require exists NODE . voted_nominate(NODE, v);
+        require exists NODE . accepted_nominate(NODE, v)
+    }
+
+    # These empty objects serve as Ivy-side identities of C++ objects declared
+    # as members of `node` and indexed by `self`. This lets us anti-quote them
+    # in C++ quasi-quotes and have Ivy automatically index them by `self`.
+    object testSCP = {}
+
+    # Anything that has to be declared in the .h file goes here.
+    <<< header
+    >>>
+
+    # We use quasi-quote splices of the object names above to tell ivy to
+    # make a member per-node. When we access them in the `init` block below
+    # they will automatically be indexed by `self`.
+    #
+    # Member names get emitted in the header, so they cannot use types that
+    # are only declared in the implementation (eg. thunk names). They must
+    # use wrapper types or incomplete type refs (eg. unique_ptr<T>) instead.
+    #
+    # We also use unique_ptr<T> for any type with a non-default ctor, for example
+    # the TestSCP object, because Ivy default-constructs members and then
+    # separately runs the `init` code below, to initialize them.
+    <<< member
+    std::unique_ptr<stellar::TestSCP> `testSCP`;
+    >>>
+
+    # This will be emitted as a loop over self:id_t, initializing each "node object"
+    # (which is simply a set of self-indexed members) in the executable::executable
+    # (world) constructor
+    <<< init
+    `testSCP` = std::make_unique<stellar::TestSCP>(stellar::fromIvyIdT(`self`), *gNetwork->mQSet,
+                                                   std::make_unique<%`value_externalized`>(`value_externalized`),
+                                                   std::make_unique<%`nominating_value`>(`nominating_value`),
+                                                   std::make_unique<%`started_ballot_protocol`>(`started_ballot_protocol`),
+                                                   std::make_unique<%`accepted_ballot_prepared`>(`accepted_ballot_prepared`),
+                                                   std::make_unique<%`confirmed_ballot_prepared`>(`confirmed_ballot_prepared`),
+                                                   std::make_unique<%`accepted_commit`>(`accepted_commit`),
+                                                   std::make_unique<%`emit_envelope`>(`emit_envelope`),
+                                                   std::make_unique<%`emit_prepare`>(`emit_prepare`),
+                                                   std::make_unique<%`emit_confirm`>(`emit_confirm`),
+                                                   std::make_unique<%`emit_externalize`>(`emit_externalize`),
+                                                   std::make_unique<%`emit_logical_vote_nominate`>(`emit_logical_vote_nominate`),
+                                                   std::make_unique<%`emit_logical_accept_nominate`>(`emit_logical_accept_nominate`));
+    >>>
+
+    # Ghost variables tracking the history of which nodes _self_ has heard from --
+    # unlike the relations outside the node module, these are all implicitly 1-more-ary
+    # than they appear, implicitly all qualified by `self`.
+    relation heard_vote_nominate(SRC:id_t, VAL:val_t)
+    relation heard_accept_nominate(SRC:id_t, VAL:val_t)
+
+    action readBroadcastEnvelopes = {
+        <<< impure
+         `broadcastEnvelopes` = (`counter_t`)gNetwork->mBroadcastEnvelopes.size();
+        >>>
+    }
+
+    export action receive_pending_envelope(envNum:counter_t) = {
+        <<< impure
+        {
+            auto env = gNetwork->mBroadcastEnvelopes.at(`envNum`);
+            // Only receive envelopes we ourselves did not send.
+            auto &stmt = env->getStatement();
+            if (!(stmt.nodeID == `testSCP`->getSCP().getLocalNodeID()))
+            {
+                `testSCP`->setLocalLogPrefix();
+                `testSCP`->getSCP().receiveEnvelope(env);
+            }
+        }
+        >>>
+    }
+
+    before receive_pending_envelope {
+        require envNum < broadcastEnvelopes;
+        require ~received(self, envNum);
+    }
+    after receive_pending_envelope {
+        received(self, envNum) := true
+    }
+
+
+    # This initiates a nomination _from_ the current node.
+    export action nominate(val:val_t) = {
+        <<< impure
+        `testSCP`->setLocalLogPrefix();
+        // Fake fixed value for LCL hash: 0xff
+        stellar::Value sprev = stellar::fromIvyValT(0xff);
+        auto vwp = std::make_shared<stellar::ValueWrapper>(stellar::fromIvyValT(`val`));
+        `testSCP`->getSCP().nominate(0, vwp, sprev);
+        >>>
+    }
+
+    # These have to be vars + actions instead of functions with native definitions;
+    # for some reason Ivy is willing to recognize the anti-quote of `self` in a
+    # function definition here but not anti-quotes of `testSCP`. It only likes
+    # `testSCP` in a native action, not a native function.
+    var stmtCount : counter_t
+    action readStmtCount = { <<< `stmtCount` = `testSCP`->getSCPStatementCount(); >>> }
+
+    var nomRound : counter_t
+    action readNomRound = { <<< `nomRound` = `testSCP`->getSCPNomRound(); >>> }
+
+    var isLeader : bool
+    action readLeader = { <<< `isLeader` = `testSCP`->isLeader(); >>> }
+
+    var bstate : ballotstate
+    action readBstate = {
+        <<<
+        `bstate` = `testSCP`->getSCPBallotState<ballotstate>([](std::string const& phase) {
+            return ((phase == "PREPARE") ? `prepare` : ((phase == "CONFIRM" || phase == "FINISH") ? `confirm` : `externalize`));
+        });
+        >>>
+    }
+
+    after init {
+        voted_nominate(X, V) := false;
+        accepted_nominate(X, V) := false;
+        heard_vote_nominate(X, V) := false;
+        heard_accept_nominate(X, V) := false
+    }
+
+    before nominate {
+        require accepted_nominate(self, X) = false;
+        require voted_nominate(self, X) = false
+    }
+
+    after nominate {
+        call readLeader;
+        if isLeader {
+            voted_nominate(self, val) := true
+        }
+    }
+}
+
+extract executable_runner = network, node
