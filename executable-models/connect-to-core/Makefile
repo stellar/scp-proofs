@@ -29,6 +29,7 @@ CORE_OBJS=$(CORE_DIR)/src/crypto/BLAKE2.o \
           $(CORE_DIR)/src/util/Logging.o \
           $(CORE_DIR)/src/util/Math.o \
           $(CORE_DIR)/src/util/RandHasher.o \
+          $(CORE_DIR)/src/util/ProtocolVersion.o \
           $(CORE_DIR)/src/util/Scheduler.o \
           $(CORE_DIR)/src/util/Timer.o \
           $(CORE_DIR)/src/util/numeric.o \
