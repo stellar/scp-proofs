@@ -24,6 +24,7 @@ object network = {
     #include <memory>
     #include <vector>
     #include <exception>
+    #include <algorithm>
     #include <mutex>
     #include <cstdint>
 
@@ -48,6 +49,8 @@ object network = {
     struct %`node.accepted_commit`;
     struct %`node.emit_envelope`;
     struct %`node.emit_prepare`;
+    struct %`node.record_vote_nominate`;
+    struct %`node.record_accept_nominate`;
     struct %`node.emit_confirm`;
     struct %`node.emit_externalize`;
     struct %`node.emit_logical_vote_nominate`;
@@ -559,22 +562,6 @@ object network = {
     }
 }
 
-# Ghost variables tracking the history of which nodes did what in the network. NB: these have to be
-# _outside_ the node module, otherwise N-ary relations implicitly get upgraded into N+1-ary, often
-# mean something very different!
-relation voted_nominate(NODE:id_t, VAL:val_t)
-relation accepted_nominate(NODE:id_t, VAL:val_t)
-relation confirmed_nominate(NODE:id_t, VAL:val_t)
-
-relation voted_abort(NODE:id_t, CTR:counter_t, VAL:val_t)
-relation accepted_abort(NODE:id_t, CTR:counter_t, VAL:val_t)
-relation confirmed_abort(NODE:id_t, CTR:counter_t, VAL:val_t)
-
-relation voted_commit(NODE:id_t, CTR:counter_t, VAL:val_t)
-relation accepted_commit(NODE:id_t, CTR:counter_t, VAL:val_t)
-relation confirmed_commit(NODE:id_t, CTR:counter_t, VAL:val_t)
-
-
 # We track the received-status of every envelope that was emitted as well as the
 # count of envelopes that have been generated. Receipt is gated on having not yet
 # received a message, though sending and receiving can happen in different orders.
@@ -586,8 +573,13 @@ object node(self:id_t) = {
     function member(N:id_t, S:nodeset_t):bool
     definition member(n:id_t, s:nodeset_t) = <<< ((bool)(`s` & (1 << `n`))) >>>
 
+    # In a 4-node network, a set is a quorum if and only if it contains at least 3 nodes.
     function is_quorum(S:nodeset_t):bool
     definition is_quorum(s:nodeset_t) = <<< (__builtin_popcount(`s`) >= ((__CARD__id_t / 2) + 1)) >>>
+
+    # In a 4-node network, a set is v-blocking if and only if it contains v OR it contains at least two nodes.
+    function is_v_blocking(S:nodeset_t):bool
+    definition is_v_blocking(s:nodeset_t) = <<< (__builtin_popcount(`s`) >= 2 || ((bool)(`s` & (1 << `self`)))) >>>
 
     relation ballot_lt(AC:counter_t, AV:val_t, BC:counter_t, BV:val_t)
     definition ballot_lt(ac:counter_t, av:val_t, bc:counter_t, bv:val_t) = (ac < bc | (ac = bc & av < bv))
@@ -636,19 +628,30 @@ object node(self:id_t) = {
     # nomination protocol messages encode a variable number of vote and accept
     # concepts, so we split these out into separate logical vote and accept
     # callbacks.
-    action emit_logical_vote_nominate(val:val_t)
-    action emit_logical_accept_nominate(val:val_t)
+    action emit_logical_vote_nominate(value:val_t) = {
+        # Note:
+        # Generally speaking, we use these state variables to keep track of
+        # what Ivy thinks that SCP nodes should be doing.
+        # However, voting to nominate a certain value is not an action that we can predict
+        # by some other variables.
+        heard_vote_nominate(self, value) := true;
+        if ready_to_accept_but_have_not_accepted_nominate(value) {
+            heard_accept_nominate(self, value) := true;
+        }
+    }
+    action emit_logical_accept_nominate(value:val_t)
 
     before emit_logical_accept_nominate {
-        require exists S:nodeset_t . is_quorum(S) & forall N:id_t . member(N,S) -> (voted_nominate(N, val) | accepted_nominate(N, val))
+        require heard_accept_nominate(self, value);
+        require exists S:nodeset_t . is_quorum(S) & forall N:id_t . member(N,S) -> (heard_vote_nominate(N, value) | heard_accept_nominate(N, value))
     }
 
     after emit_logical_vote_nominate {
-        voted_nominate(self, val) := true
+        require heard_vote_nominate(self, value);
     }
 
     after emit_logical_accept_nominate {
-        accepted_nominate(self, val) := true
+        require heard_accept_nominate(self, value);
     }
 
     # ballot protocol messages encode a number of concepts but they use mostly-fixed
@@ -659,29 +662,6 @@ object node(self:id_t) = {
                         prepared_prime:bool, prepared_prime_counter:counter_t, prepared_prime_value:val_t,
                         c_counter:counter_t, h_counter:counter_t)
 
-    before emit_prepare {
-        # `self` may receive messages that allow itself to:
-        # 1. accept to nominate x, and
-        # 2. confirm to nominate x, and
-        # 3. vote to prepare x
-        # at the same time.
-        #
-        # When that happens, the node needs to emit two envelopes:
-        # 1. nomination envelope containing { vote(nominate(x)), accept(nominate(x)) }
-        # 2. ballot envelope containing { vote(prepare(x)) }
-        #
-        # It turns out that the current SCP implementation emits 2 before 1.
-        # Therefore, `emit_prepare` will be called before `accepted_nominate` gets updated.
-        # Thus we will let a node emit a prepare statement as long as a quorum
-        # accepts it possibly except for itself.
-        require exists S:nodeset_t . is_quorum(S) & forall N:id_t . member(N,S) -> (N = self | accepted_nominate(N, ballot_value))
-    }
-
-    after emit_prepare {
-        voted_abort(self,BC,BV) := prepare_aborts(ballot_counter, ballot_value, BC, BV);
-        accepted_abort(self,BC,BV) := prepare_aborts(ballot_counter, ballot_value, BC, BV)
-    }
-
     action emit_confirm(ballot_counter:counter_t,
                         ballot_value:val_t,
                         prepared_counter:counter_t,
@@ -691,8 +671,8 @@ object node(self:id_t) = {
     action emit_externalize(commit_counter:counter_t, commit_value:val_t, h_counter:counter_t)
 
     before value_externalized {
-        require exists NODE . voted_nominate(NODE, v);
-        require exists NODE . accepted_nominate(NODE, v)
+        require exists NODE . heard_vote_nominate(NODE, v);
+        require exists NODE . heard_accept_nominate(NODE, v)
     }
 
     # These empty objects serve as Ivy-side identities of C++ objects declared
@@ -743,6 +723,10 @@ object node(self:id_t) = {
     # Ghost variables tracking the history of which nodes _self_ has heard from --
     # unlike the relations outside the node module, these are all implicitly 1-more-ary
     # than they appear, implicitly all qualified by `self`.
+    # `heard_{vote,accept}_nominate(node, val) = true` means that Ivy thinks that the SCP node
+    # should have heard `node` vote/accept to nominate `val` based on information available.
+    # One slightly strange case is heard_vote_nominate(self, val) which simply is the record of
+    # whether the node has voted to nominate `val` as this isn't something we can just guess from other info.
     relation heard_vote_nominate(SRC:id_t, VAL:val_t)
     relation heard_accept_nominate(SRC:id_t, VAL:val_t)
 
@@ -752,8 +736,61 @@ object node(self:id_t) = {
         >>>
     }
 
+    action record_vote_nominate(node:id_t, value:val_t) = {
+        heard_vote_nominate(node, value) := true;
+        if ready_to_accept_but_have_not_accepted_nominate(value) {
+            heard_accept_nominate(self, value) := true;
+            changed := true;
+        }
+    }
+
+    action record_accept_nominate(node:id_t, value:val_t) = {
+        heard_accept_nominate(node, value) := true;
+        if ready_to_accept_but_have_not_accepted_nominate(value) {
+            heard_accept_nominate(self, value) := true;
+            changed := true;
+        }
+    }
+
     export action receive_pending_envelope(envNum:counter_t) = {
         <<< impure
+        // This part updates all the heard_* relations.
+        {
+            using namespace stellar;
+            auto envelope = gNetwork->mBroadcastEnvelopes.at(`envNum`);
+            auto const& stmt = envelope->getStatement();
+            auto nodeNum = toIvyIdT(stmt.nodeID);
+            switch (stmt.pledges.type())
+            {
+                case SCP_ST_NOMINATE:
+                {
+                    auto const &nom = stmt.pledges.nominate();
+                    auto recordVoteNominateCb(`record_vote_nominate`);
+                    auto recordAcceptNominateCb(`record_accept_nominate`);
+                    for (auto const& v : nom.votes)
+                    {
+                        recordVoteNominateCb(nodeNum, toIvyValT(v));
+                        CLOG_INFO(SCP, "{} heard {} vote to nominate {}", `self`, nodeNum, toIvyValT(v));
+                    }
+                    for (auto const& a : nom.accepted)
+                    {
+                        recordAcceptNominateCb(nodeNum, toIvyValT(a));
+                        CLOG_INFO(SCP, "{} heard {} accept to nominate {}", `self`, nodeNum, toIvyValT(a));
+                    }
+                }
+                break;
+
+                case SCP_ST_PREPARE:
+                case SCP_ST_CONFIRM:
+                case SCP_ST_EXTERNALIZE:
+                {
+                    // As the first step is to focus on the nomination protocol,
+                    // we'll ignore these cases.
+                    break;
+                }
+            }
+        }
+        // This part actually delivers the envelope.
         {
             auto env = gNetwork->mBroadcastEnvelopes.at(`envNum`);
             // Only receive envelopes we ourselves did not send.
@@ -767,14 +804,93 @@ object node(self:id_t) = {
         >>>
     }
 
+    # This tracks of whether receiving envelope `envNum` should change the SCP state
+    # of this node. For instance, if this message gives the last vote that `self` needs
+    # to accept something, this becomes true.
+    # TODO: For now, this only tracks of the nomination side.
+    var changed : bool
+
     before receive_pending_envelope {
         require envNum < broadcastEnvelopes;
         require ~received(self, envNum);
-    }
-    after receive_pending_envelope {
-        received(self, envNum) := true
+        changed := false;
     }
 
+    var nomination_envelope_emitted : bool
+    relation last_nomination_envelope_voted(VALUE:val_t)
+    relation last_nomination_envelope_accepted(VALUE:val_t)
+
+    action record_last_envelope_voted(value:val_t) = {
+        last_nomination_envelope_voted(value) := true;
+    }
+
+    action record_last_envelope_accepted(value:val_t) = {
+        last_nomination_envelope_accepted(value) := true;
+    }
+
+    action read_last_nomination_envelope_emitted = {
+        <<< impure
+        {
+            // Record the content of the last nomination envelope emitted by this node.
+            using namespace stellar;
+            `nomination_envelope_emitted` = false;
+            for (auto it = gNetwork->mBroadcastEnvelopes.rbegin();
+                    it != gNetwork->mBroadcastEnvelopes.rend(); it++) {
+                auto const& stmt = (*it)->getStatement();
+                auto id = toIvyIdT(stmt.nodeID);
+                if (id != `self`) continue;
+                switch (stmt.pledges.type())
+                {
+                    case SCP_ST_NOMINATE:
+                        {
+                            `nomination_envelope_emitted` = true;
+                            auto const &nom = stmt.pledges.nominate();
+                            auto recordVoteCb(`record_last_envelope_voted`);
+                            auto recordAcceptCb(`record_last_envelope_accepted`);
+                            std::for_each(nom.votes.begin(), nom.votes.end(),
+                                          [&](auto const& v) { recordVoteCb(toIvyValT(v)); });
+                            std::for_each(nom.accepted.begin(), nom.accepted.end(),
+                                          [&](auto const& v) { recordAcceptCb(toIvyValT(v)); });
+                        }
+                        break;
+
+                    case SCP_ST_PREPARE:
+                    case SCP_ST_CONFIRM:
+                    case SCP_ST_EXTERNALIZE:
+                        {
+                            // Wrong envelope type.
+                            continue;
+                        }
+                }
+                if (`nomination_envelope_emitted`) {
+                    break;
+                }
+            }
+        }
+        >>>
+    }
+
+    after receive_pending_envelope {
+        received(self, envNum) := true;
+        if (changed)
+        {
+            # Based on what Ivy knows, the SCP node should have emitted a message.
+
+            # Initialize these to false.
+            nomination_envelope_emitted := false;
+            last_nomination_envelope_voted(VALUE) := false;
+            last_nomination_envelope_accepted(VALUE) := false;
+
+            call read_last_nomination_envelope_emitted;
+
+            # Ensure that:
+            # 1. The SCP node indeed emitted a nomination envelope as expected.
+            # 2. The envelope's voted and accepted values are correct.
+            require nomination_envelope_emitted;
+            require forall VAL. heard_vote_nominate(self, VAL) = last_nomination_envelope_voted(VAL);
+            require forall VAL. heard_accept_nominate(self, VAL) = last_nomination_envelope_accepted(VAL);
+        }
+    }
 
     # This initiates a nomination _from_ the current node.
     export action nominate(val:val_t) = {
@@ -834,8 +950,6 @@ object node(self:id_t) = {
     }
 
     after init {
-        voted_nominate(X, V) := false;
-        accepted_nominate(X, V) := false;
         heard_vote_nominate(X, V) := false;
         heard_accept_nominate(X, V) := false;
         ballot_timer_is_registered := false;
@@ -843,16 +957,39 @@ object node(self:id_t) = {
     }
 
     before nominate {
-        require accepted_nominate(self, X) = false;
-        require voted_nominate(self, X) = false
+        require heard_accept_nominate(self, X) = false;
+        require heard_vote_nominate(self, X) = false
     }
 
     after nominate {
         call readLeader;
         if isLeader {
-            voted_nominate(self, val) := true
+            heard_vote_nominate(self, val) := true
+        }
+        if ready_to_accept_but_have_not_accepted_nominate(val) {
+            heard_accept_nominate(self, val) := true;
         }
     }
+
+    relation heard_set_vote_or_accept_nominate(SET:nodeset_t, X:val_t)
+    definition heard_set_vote_or_accept_nominate(S, X) =
+        forall V. member(V, S) -> (heard_vote_nominate(V, X) | heard_accept_nominate(V, X))
+
+    relation accept_condition_1_nominate(X:val_t)
+    definition accept_condition_1_nominate(X) =
+        exists Q. (is_quorum(Q) & member(self, Q) & heard_set_vote_or_accept_nominate(Q, X))
+
+    relation heard_set_accept_nominate(SET:nodeset_t, X:val_t)
+    definition heard_set_accept_nominate(S, X) =
+        forall V. member(V, S) -> heard_accept_nominate(V, X)
+
+    relation accept_condition_2_nominate(X:val_t)
+    definition accept_condition_2_nominate(X) =
+        exists S.  (~member(self, S) & is_v_blocking(S) & heard_set_accept_nominate(S, X))
+
+    relation ready_to_accept_but_have_not_accepted_nominate(X:val_t)
+    definition ready_to_accept_but_have_not_accepted_nominate(X) =
+        ~heard_accept_nominate(self, X) & (accept_condition_1_nominate(X) | accept_condition_2_nominate(X))
 }
 
 extract executable_runner = network, node
