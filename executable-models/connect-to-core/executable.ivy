@@ -53,6 +53,7 @@ object network = {
     struct %`node.record_heard_accept_nominate`;
     struct %`node.emit_confirm`;
     struct %`node.emit_externalize`;
+    struct %`node.emit_nomination_envelope`;
     struct %`node.emit_logical_vote_nominate`;
     struct %`node.emit_logical_accept_nominate`;
     struct %`node.nomination_timer_registered`;
@@ -119,6 +120,7 @@ object network = {
             std::unique_ptr<%`node.emit_prepare`> mEmitPrepareCb;
             std::unique_ptr<%`node.emit_confirm`> mEmitConfirmCb;
             std::unique_ptr<%`node.emit_externalize`> mEmitExternalizeCb;
+            std::unique_ptr<%`node.emit_nomination_envelope`> mEmitNominationEnvelopeCb;
             std::unique_ptr<%`node.emit_logical_vote_nominate`> mEmitLogicalVoteNominateCb;
             std::unique_ptr<%`node.emit_logical_accept_nominate`> mEmitLogicalAcceptNominateCb;
             std::unique_ptr<%`node.nomination_timer_registered`> mNominationTimerRegisteredCb;
@@ -137,6 +139,7 @@ object network = {
             std::unique_ptr<%`node.emit_prepare`>,
             std::unique_ptr<%`node.emit_confirm`>,
             std::unique_ptr<%`node.emit_externalize`>,
+            std::unique_ptr<%`node.emit_nomination_envelope`>,
             std::unique_ptr<%`node.emit_logical_vote_nominate`>,
             std::unique_ptr<%`node.emit_logical_accept_nominate`>,
             std::unique_ptr<%`node.nomination_timer_registered`>,
@@ -295,9 +298,11 @@ object network = {
                 case SCP_ST_NOMINATE:
                 {
                     CLOG_INFO(SCP, "TestSCP::emitEnvelope(SCP_ST_NOMINATE, ...)");
+                    assert(mEmitNominationEnvelopeCb);
                     assert(mEmitLogicalVoteNominateCb);
                     assert(mEmitLogicalAcceptNominateCb);
                     auto const &nom = stmt.pledges.nominate();
+                    (*mEmitNominationEnvelopeCb)();
                     for (auto const& v : nom.votes)
                     {
                         CLOG_INFO(SCP, "    => node.emit_logical_vote_nominate(node:{}, val:{})", nodeNum, toIvyValT(v));
@@ -467,6 +472,7 @@ object network = {
             std::unique_ptr<%`node.emit_prepare`> emitPrepareCb,
             std::unique_ptr<%`node.emit_confirm`> emitConfirmCb,
             std::unique_ptr<%`node.emit_externalize`> emitExternalizeCb,
+            std::unique_ptr<%`node.emit_nomination_envelope`> emitNominationEnvelopeCb,
             std::unique_ptr<%`node.emit_logical_vote_nominate`> emitLogicalVoteNominateCb,
             std::unique_ptr<%`node.emit_logical_accept_nominate`> emitLogicalAcceptNominateCb,
             std::unique_ptr<%`node.nomination_timer_registered`> nominationTimerRegisteredCb,
@@ -483,6 +489,7 @@ object network = {
         mEmitPrepareCb(std::move(emitPrepareCb)),
         mEmitConfirmCb(std::move(emitConfirmCb)),
         mEmitExternalizeCb(std::move(emitExternalizeCb)),
+        mEmitNominationEnvelopeCb(std::move(emitNominationEnvelopeCb)),
         mEmitLogicalVoteNominateCb(std::move(emitLogicalVoteNominateCb)),
         mEmitLogicalAcceptNominateCb(std::move(emitLogicalAcceptNominateCb)),
         mNominationTimerRegisteredCb(std::move(nominationTimerRegisteredCb)),
@@ -625,6 +632,10 @@ object node(self:id_t) = {
         broadcastEnvelopes := broadcastEnvelopes + 1
     }
 
+    action emit_nomination_envelope = {
+        number_of_nomination_envelopes_emitted := number_of_nomination_envelopes_emitted + 1;
+    }
+
     # nomination protocol messages encode a variable number of vote and accept
     # concepts, so we split these out into separate logical vote and accept
     # callbacks.
@@ -638,8 +649,13 @@ object node(self:id_t) = {
         if ready_to_accept_but_have_not_accepted_nominate(value) {
             heard_accept_nominate(self, value) := true;
         }
+        last_nomination_envelope_voted(value) := true;
     }
-    action emit_logical_accept_nominate(value:val_t)
+
+    action emit_logical_accept_nominate(value:val_t) = {
+        heard_accept_nominate(self, value) := true;
+        last_nomination_envelope_accepted(value) := true;
+    }
 
     before emit_logical_accept_nominate {
         require heard_accept_nominate(self, value);
@@ -714,6 +730,7 @@ object node(self:id_t) = {
                                                    std::make_unique<%`emit_prepare`>(`emit_prepare`),
                                                    std::make_unique<%`emit_confirm`>(`emit_confirm`),
                                                    std::make_unique<%`emit_externalize`>(`emit_externalize`),
+                                                   std::make_unique<%`emit_nomination_envelope`>(`emit_nomination_envelope`),
                                                    std::make_unique<%`emit_logical_vote_nominate`>(`emit_logical_vote_nominate`),
                                                    std::make_unique<%`emit_logical_accept_nominate`>(`emit_logical_accept_nominate`),
                                                    std::make_unique<%`nomination_timer_registered`>(`nomination_timer_registered`),
@@ -814,79 +831,24 @@ object node(self:id_t) = {
         require envNum < broadcastEnvelopes;
         require ~received(self, envNum);
         changed := false;
+        number_of_nomination_envelopes_emitted := 0;
+        last_nomination_envelope_voted(VALUE) := false;
+        last_nomination_envelope_accepted(VALUE) := false;
     }
 
-    var nomination_envelope_emitted : bool
+    var number_of_nomination_envelopes_emitted : counter_t
     relation last_nomination_envelope_voted(VALUE:val_t)
     relation last_nomination_envelope_accepted(VALUE:val_t)
-
-    action record_last_envelope_voted(value:val_t) = {
-        last_nomination_envelope_voted(value) := true;
-    }
-
-    action record_last_envelope_accepted(value:val_t) = {
-        last_nomination_envelope_accepted(value) := true;
-    }
-
-    action read_last_nomination_envelope_emitted = {
-        <<< impure
-        {
-            // Record the content of the last nomination envelope emitted by this node.
-            using namespace stellar;
-            `nomination_envelope_emitted` = false;
-            for (auto it = gNetwork->mBroadcastEnvelopes.rbegin();
-                    it != gNetwork->mBroadcastEnvelopes.rend(); it++) {
-                auto const& stmt = (*it)->getStatement();
-                auto id = toIvyIdT(stmt.nodeID);
-                if (id != `self`) continue;
-                switch (stmt.pledges.type())
-                {
-                    case SCP_ST_NOMINATE:
-                        {
-                            `nomination_envelope_emitted` = true;
-                            auto const &nom = stmt.pledges.nominate();
-                            auto recordVoteCb(`record_last_envelope_voted`);
-                            auto recordAcceptCb(`record_last_envelope_accepted`);
-                            std::for_each(nom.votes.begin(), nom.votes.end(),
-                                          [&](auto const& v) { recordVoteCb(toIvyValT(v)); });
-                            std::for_each(nom.accepted.begin(), nom.accepted.end(),
-                                          [&](auto const& v) { recordAcceptCb(toIvyValT(v)); });
-                        }
-                        break;
-
-                    case SCP_ST_PREPARE:
-                    case SCP_ST_CONFIRM:
-                    case SCP_ST_EXTERNALIZE:
-                        {
-                            // Wrong envelope type.
-                            continue;
-                        }
-                }
-                if (`nomination_envelope_emitted`) {
-                    break;
-                }
-            }
-        }
-        >>>
-    }
 
     after receive_pending_envelope {
         received(self, envNum) := true;
         if (changed)
         {
             # Based on what Ivy knows, the SCP node should have emitted a message.
-
-            # Initialize these to false.
-            nomination_envelope_emitted := false;
-            last_nomination_envelope_voted(VALUE) := false;
-            last_nomination_envelope_accepted(VALUE) := false;
-
-            call read_last_nomination_envelope_emitted;
-
             # Ensure that:
-            # 1. The SCP node indeed emitted a nomination envelope as expected.
+            # 1. The SCP node indeed emitted exactly one nomination envelope as expected.
             # 2. The envelope's voted and accepted values are correct.
-            require nomination_envelope_emitted;
+            require number_of_nomination_envelopes_emitted = 1;
             require forall VAL. heard_vote_nominate(self, VAL) = last_nomination_envelope_voted(VAL);
             require forall VAL. heard_accept_nominate(self, VAL) = last_nomination_envelope_accepted(VAL);
         }
