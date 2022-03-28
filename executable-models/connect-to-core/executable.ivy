@@ -49,8 +49,8 @@ object network = {
     struct %`node.accepted_commit`;
     struct %`node.emit_envelope`;
     struct %`node.emit_prepare`;
-    struct %`node.record_vote_nominate`;
-    struct %`node.record_accept_nominate`;
+    struct %`node.record_heard_vote_nominate`;
+    struct %`node.record_heard_accept_nominate`;
     struct %`node.emit_confirm`;
     struct %`node.emit_externalize`;
     struct %`node.emit_logical_vote_nominate`;
@@ -736,7 +736,7 @@ object node(self:id_t) = {
         >>>
     }
 
-    action record_vote_nominate(node:id_t, value:val_t) = {
+    action record_heard_vote_nominate(node:id_t, value:val_t) = {
         heard_vote_nominate(node, value) := true;
         if ready_to_accept_but_have_not_accepted_nominate(value) {
             heard_accept_nominate(self, value) := true;
@@ -744,7 +744,7 @@ object node(self:id_t) = {
         }
     }
 
-    action record_accept_nominate(node:id_t, value:val_t) = {
+    action record_heard_accept_nominate(node:id_t, value:val_t) = {
         heard_accept_nominate(node, value) := true;
         if ready_to_accept_but_have_not_accepted_nominate(value) {
             heard_accept_nominate(self, value) := true;
@@ -765,8 +765,8 @@ object node(self:id_t) = {
                 case SCP_ST_NOMINATE:
                 {
                     auto const &nom = stmt.pledges.nominate();
-                    auto recordVoteNominateCb(`record_vote_nominate`);
-                    auto recordAcceptNominateCb(`record_accept_nominate`);
+                    auto recordVoteNominateCb(`record_heard_vote_nominate`);
+                    auto recordAcceptNominateCb(`record_heard_accept_nominate`);
                     for (auto const& v : nom.votes)
                     {
                         recordVoteNominateCb(nodeNum, toIvyValT(v));
