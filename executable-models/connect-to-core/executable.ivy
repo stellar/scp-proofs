@@ -649,12 +649,12 @@ object node(self:id_t) = {
         if ready_to_accept_but_have_not_accepted_nominate(value) {
             heard_accept_nominate(self, value) := true;
         }
-        last_nomination_envelope_voted(value) := true;
+        last_emitted_nomination_envelope_voted(value) := true;
     }
 
     action emit_logical_accept_nominate(value:val_t) = {
         heard_accept_nominate(self, value) := true;
-        last_nomination_envelope_accepted(value) := true;
+        last_emitted_nomination_envelope_accepted(value) := true;
     }
 
     before emit_logical_accept_nominate {
@@ -832,13 +832,13 @@ object node(self:id_t) = {
         require ~received(self, envNum);
         changed := false;
         number_of_nomination_envelopes_emitted := 0;
-        last_nomination_envelope_voted(VALUE) := false;
-        last_nomination_envelope_accepted(VALUE) := false;
+        last_emitted_nomination_envelope_voted(VALUE) := false;
+        last_emitted_nomination_envelope_accepted(VALUE) := false;
     }
 
     var number_of_nomination_envelopes_emitted : counter_t
-    relation last_nomination_envelope_voted(VALUE:val_t)
-    relation last_nomination_envelope_accepted(VALUE:val_t)
+    relation last_emitted_nomination_envelope_voted(VALUE:val_t)
+    relation last_emitted_nomination_envelope_accepted(VALUE:val_t)
 
     after receive_pending_envelope {
         received(self, envNum) := true;
@@ -849,8 +849,8 @@ object node(self:id_t) = {
             # 1. The SCP node indeed emitted exactly one nomination envelope as expected.
             # 2. The envelope's voted and accepted values are correct.
             require number_of_nomination_envelopes_emitted = 1;
-            require forall VAL. heard_vote_nominate(self, VAL) = last_nomination_envelope_voted(VAL);
-            require forall VAL. heard_accept_nominate(self, VAL) = last_nomination_envelope_accepted(VAL);
+            require forall VAL. heard_vote_nominate(self, VAL) = last_emitted_nomination_envelope_voted(VAL);
+            require forall VAL. heard_accept_nominate(self, VAL) = last_emitted_nomination_envelope_accepted(VAL);
         }
     }
 
