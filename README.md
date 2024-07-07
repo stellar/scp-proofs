@@ -1,6 +1,6 @@
 This is a repository containing formal proofs about the Stellar Consensus
 Protocol as described in the paper "Fast and secure global payments with
-Stellar" (SOSP 2019).
+Stellar" ([SOSP 2019](https://www.scs.stanford.edu/~dm/home/papers/lokhava:stellar-core.pdf)).
 
 Using Isabelle/HOL, we formalize the theory of Federated Byzantine Agreement
 Systems (FBAS) and we prove two main results: the cascade theorem and that the
