@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y locales && \
 
 ENV LANG=en_US.UTF-8
 
-RUN apt-get update && apt-get install -y git python3 python3-pip g++ cmake python3-ply python3-pygraphviz git python3-tk tix pkg-config libssl-dev libreadline-dev
+RUN apt-get update && apt-get install -y git python3 python3-pip g++ cmake python3-ply python3-pygraphviz git python3-tk tix pkg-config libssl-dev libreadline-dev python3-setuptools python3-venv
 
 # create a user:
 RUN useradd -ms /bin/bash user
@@ -21,15 +21,12 @@ WORKDIR /home/user
 RUN git clone --recurse-submodules https://github.com/kenmcmil/ivy.git
 WORKDIR /home/user/ivy/
 
-# make sure it's using the right python:
-RUN sed -i "s/'python /'python3 /g" build_submodules.py
+RUN sed -i "s/'python /'python3 /g" build_submodules.py # make sure it's using the right python:
+RUN sed -i '203,$ s/^/#/' build_submodules.py # don't build useless stuff
 RUN python3 build_submodules.py
-USER root
-RUN apt-get update && apt-get install -y python3-setuptools python3-venv
-USER user
 RUN python3 -m venv venv
 ENV PATH="/home/user/ivy/venv/bin/:$PATH"
-RUN pip install --upgrade setuptools
+RUN pip install --upgrade setuptools # fails without this at the moment
 RUN python3 setup.py install
 COPY . /home/user/scp-proofs/
 

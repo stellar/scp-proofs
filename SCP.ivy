@@ -1,17 +1,4 @@
-#lang ivy1.7
-
-# Note about liveness: Once a quorum unanimously votes to prepare v, then the
-# outcome is univalent (for v), and it is easy to prove that a decision is
-# reached under synchrony. Now how do we make sure that a quorum unanimously
-# prepares the same value? Since nodes prepare the highest confirmed-prepared
-# value, we must rely on the cascading effect in a long-enough round to make
-# sure that all nodes agree on the highest confirmed prepared value by the end
-# of the round, and thus propose the same this in the next round.
-
-# Because of SCP's state-bounding optimizations, this might be tricky. The crux
-# is that the highest confirmed prepared by an intact should propagate, and
-# thus eventually all have it. For now, we formalize an abstract version of the
-# protocol that does not have those optimizations.
+#lang ivy1.8
 
 include order
 
@@ -20,12 +7,11 @@ finite type node
 type nset # sets of nodes
 instance ballot : unbounded_sequence
 
-# We consider several sets of nodes: well-behaved, intertwined, and intact. The
-# trusted isolates below give the properties that those sets sastify by
-# assumption. Those properties come from the theory of Federated Byzantine
-# Quorum Systems. Please visite [this
-# link](https://devel.isa-afp.org/entries/Stellar_Quorums.html) for formal
-# proofs in Isabelle/HOL.
+# We consider well-behaved, intertwined, and intact nodes. The trusted isolates
+# below give the properties that those sets sastify by assumption. Those
+# properties come from the theory of Federated Byzantine Quorum Systems. Please
+# visite [this link](https://www.isa-afp.org/entries/Stellar_Quorums.html) for
+# formal proofs in Isabelle/HOL.
 
 relation well_behaved(N:node)
 relation intertwined(N:node)
@@ -48,11 +34,9 @@ trusted isolate quorum_properties = {
     # if Q1 and Q2 are two quorums of intact nodes, then Q1 and Q2 have an intact node in common:
     property [qi_intact] (exists N1 . intact(N1) & is_quorum(Q1) & member(N1,Q1)) & (exists N2 . intact(N2) & is_quorum(Q2) & member(N2,Q2)) -> exists N3 . intact(N3) & member(N3,Q1) & member(N3,Q2)
     # a set that blocks an intact node contains an intact node:
-    property [blocking] (exists N . intact(N) & blocks_slices(S,N)) -> exists N2 . member(N2,S) & intact(N2)
+    property [slice_blocks_ne] (exists N . intact(N) & blocks_slices(S,N)) -> (exists N2 . member(N2,S) & intact(N2))
     # the set of all intact nodes is a quorum
     property [intact_is_quorum] exists Q . (forall N . member(N,Q) <-> intact(N)) & is_quorum(Q)
-    # a set S that blocks an intact node cannot be empty
-    property [slice_blocks_ne] (exists N . intact(N) & blocks_slices(S,N)) -> exists N . intact(N) & member(N,S)
 }
 
 axiom [cascade_thm] {
@@ -309,7 +293,7 @@ object protocol = {
         invariant ~(well_behaved(N) & left_ballot(N,B) & B2 < B & ~left_ballot(N,B2))
         invariant ~(well_behaved(N) & started(N,B) & B0 < B & ~left_ballot(N,B0))
 
-    } with actions, ballot, node_properties, quorum_properties.qi_intact, quorum_properties.blocking
+    } with actions, ballot, node_properties, quorum_properties.qi_intact, quorum_properties.slice_blocks_ne
 
     # Liveness proofs
 
