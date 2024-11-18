@@ -124,13 +124,14 @@ object protocol = {
         }
 
         # n1 receives a new vote to prepare (b,v); it checks whether quorum threshold is reached and, if so, accepts (b,v) as prepared unless it accepted a different, earlier value as committed.
+        # TODO: It shouldn't be possible that it accepted a different, earlier value as committed. Unless the node is befouled?
         action receive_vote_prepare(na:node, nb:node, b:ballot, v:value) = {
             require voted_prepared(nb,b,v);
             received_vote_prepare(na,nb,b,v) := true;
             if   (exists Q . is_quorum(Q) & member(na,Q) &
                    (forall N . member(N,Q) -> (received_vote_prepare(na,N,b,v) | received_accept_prepare(na,N,b,v))))
-               & (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) # not accepted anything contradictory
-               & (forall V . ~accepted_prepared(na,b,V)) # do not accept twice (safety of intertwined depends on this)
+               & (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) # not accepted anything contradictory TODO: or even voted committed no?
+               & (forall V . ~accepted_prepared(na,b,V)) # do not accept twice (safety of intertwined depends on this) TODO: not in the IETF spec
             {
                 accepted_prepared(na,b,v) := true;
             };
@@ -150,7 +151,7 @@ object protocol = {
             };
             if   ((exists Q . is_quorum(Q) & member(na,Q) & (forall N . member(N,Q) -> (received_vote_prepare(na,N,b,v) | received_accept_prepare(na,N,b,v)))) | (exists S . blocks_slices(S,na) & (forall N . member(N,S) -> received_accept_prepare(na,N,b,v))))
                & (forall B,V . ~(accepted_committed(na,B,V) & B < b & V ~= v)) # not accepted anything contradictory
-               & (forall V . ~accepted_prepared(na,b,V)) # do not accept twice (safety of intertwined depends on this)
+               & (forall V . ~accepted_prepared(na,b,V)) # do not accept twice (safety of intertwined depends on this; TODO why?)
             {
                 accepted_prepared(na,b,v) := true;
             };
@@ -259,8 +260,7 @@ object protocol = {
         # Here we prove additional safety properties which we later use in the liveness proof
         # NOTE: at the moment, most of those are unused
 
-        # A value unanimously voted prepared cannot be contradicted. We can use this to prove that, in a long-enough ballot in which all intact nodes prepare the same value, all intact nodes confirm that value as committed (because, as per the invariant, its progress cannot be stopped by a contradicting accepted-committed value).
-        # NOTE: this is an interesting property of the protocol, i.e. the outcome becomes univalent as soon as a quorum unanimously votes to prepare a value.
+        # TODO: ??
         invariant [inv1] (forall N . intact(N) -> voted_prepared(N,B,V)) & intact(N) & accepted_committed(N,B2,V2) & B2 < B -> V = V2
 
         # An accepted prepared value cannot be contradicted. We use this to prove that once an intact nodes confirms (b,v) as prepared, the cascade effect occurs (because (b,v) is never contradicted) and eventually all intact nodes confirm.

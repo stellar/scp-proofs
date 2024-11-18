@@ -96,8 +96,8 @@ protocol.intertwined_safety in SCP.ivy) and of some of SCP's liveness properties
 To run the proof (that is, to have Ivy check them), run the following commands
 (on Linux) from the root of this repository:
 ```
-docker-compose build ivy-check
-docker-compose run ivy-check
+docker compose build ivy-check
+docker compose run --rm ivy-check
 ```
 
 ## Background material to understand the model and proofs

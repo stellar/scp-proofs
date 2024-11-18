@@ -1,6 +1,26 @@
 version: '3'
 services:
   ivy-check:
-    build: .
+    build: ./docker/
     volumes:
       - ./:/home/user/scp-proofs:ro
+  core-mbt:
+    image: core-mbt
+    build:
+      context: ./docker
+      dockerfile: ./Dockerfile.mbt
+    volumes:
+      - ./stellar-core:/home/user/stellar-core:rw
+      - ./misc:/home/user/misc:rw
+      - ./ivy:/home/user/ivy:rw
+      - ./scripts:/home/user/scripts:rw
+      # - ./:/home/user/scp-proofs:rw
+      - ./executable-models/connect-to-core:/home/user/connect-to-core:rw
+    command: /bin/bash
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
+    container_name: core-mbt
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_PTRACE
