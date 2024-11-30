@@ -1,6 +1,22 @@
 This directory contains an experiment in directly connecting Ivy to stellar-core's SCP implementation,
 such that Ivy can act upon (and randomly test) the SCP state machine, crypto, messages, nodes and qsets.
 
+# Overview
+The setups is:
+
+- Ivy creates a network of 4 SCP nodes (i.e., Core implementation of the SCP) where any majority set is a quorum.
+- Ivy keeps track of all emitted envelopes and deliver them to each node while possibly reordering them.
+
+When Ivy delivers envelope `e` to node `v`, Ivy does 3 things:
+
+1. Ivy records that `v` received `e` and exactly what `e` says. (e.g., `v` heard that `w` accepted to nominate `x`)
+2. Ivy deduces what `v` should do upon receiving `e`. (e.g., accept to nominate a certain value)
+3. Ivy checks if `v` emitted a message and if the emitted message is correct. (e.g., Is the set of accepted candidates the same as what Ivy thinks?)
+
+Obviously, `v` should emit a message in response to receiving `e` if and only if `e` lets `v` vote, accept, or confirm something new.
+As a first step, we are focusing on the nomination protocol.
+Therefore, 3 only checks if `v` has emitted a nomination message & if the set of voted & accepted values is correct.
+
 # Classes
 
 - `executable` is the main class.
